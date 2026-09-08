@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { ClientContextLike, RpcResultLike } from '../../src/client/scope.js'
 import { WorkbenchStore, syncKey } from '../../src/client/workbench/store.js'
+import { offersOf } from '../../src/client/workbench/types.js'
 
 /**
  * The panel's state machine, driven by a stubbed Remote face.
@@ -20,7 +21,7 @@ interface Call {
 /** A stubbed browser context whose answers the test supplies. */
 class FakeContext {
   readonly calls: Call[] = []
-  answers: Record<string, () => RpcResultLike> = {}
+  answers: Record<string, () => RpcResultLike | Promise<RpcResultLike>> = {}
 
   readonly connection = {
     rpc: {
@@ -90,6 +91,18 @@ afterEach(() => {
   store?.dispose()
   store = undefined
 })
+
+/**
+ * A promise whose settlement the test controls.
+ * @returns the promise and the function that settles it.
+ */
+function deferred(): { promise: Promise<RpcResultLike>; settle: (value: RpcResultLike) => void } {
+  let settle: (value: RpcResultLike) => void = () => undefined
+  const promise = new Promise<RpcResultLike>((resolve) => {
+    settle = resolve
+  })
+  return { promise, settle }
+}
 
 describe('workbench store', () => {
   it('changes its sync key only when the document moves', () => {
@@ -196,5 +209,80 @@ describe('workbench store', () => {
 
     expect(store.getSnapshot().draftCategory).toBe('电视')
     expect(store.getSnapshot().error).toBe('category is required')
+  })
+
+  it('abandons a refresh that a newer one overtook', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a', 'b', 'c']))
+    store = new WorkbenchStore(context.asContext())
+    await store.refresh()
+
+    // A poll reads the three-offer document, then stalls on the wire.
+    const stalled = deferred()
+    context.answers['showSession'] = () => stalled.promise
+    const poll = store.refresh({ silent: true })
+
+    // Meanwhile a delete lands and its own refresh completes.
+    answerWith(context, 'aaaaaaaaaaaa', session('t2', ['a', 'b']))
+    await store.refresh()
+    expect(offersOf(store.getSnapshot().session)).toHaveLength(2)
+    store.dismissNotice()
+
+    // The stalled poll now answers with the pre-delete document.
+    stalled.settle({ ok: true, value: session('t1', ['a', 'b', 'c']) })
+    await poll
+
+    // The deleted product must not come back, and nothing was captured.
+    expect(offersOf(store.getSnapshot().session)).toHaveLength(2)
+    expect(store.getSnapshot().notice).toBeNull()
+  })
+
+  it('keeps an error on screen through a successful poll', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = new WorkbenchStore(context.asContext())
+    await store.refresh()
+
+    context.answers['setCurrentSession'] = () => ({
+      ok: false,
+      error: { code: 'dealbuddy/session-not-found', message: 'gone' },
+    })
+    await store.selectSession('bbbbbbbbbbbb')
+    const reported = store.getSnapshot().error
+    expect(reported).toBe('这个会话的文件已经不在了。')
+
+    await store.refresh({ silent: true })
+    expect(store.getSnapshot().error).toBe(reported)
+  })
+
+  it('does not re-render when a poll finds nothing new', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = new WorkbenchStore(context.asContext())
+    await store.refresh()
+
+    let notifications = 0
+    store.subscribe(() => {
+      notifications += 1
+    })
+    await store.refresh({ silent: true })
+
+    expect(notifications).toBe(0)
+  })
+
+  it('stops answering once disposed', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = new WorkbenchStore(context.asContext())
+    store.toggle()
+    await store.refresh()
+
+    store.dispose()
+    const calls = context.calls.length
+    store.resume()
+    await Promise.resolve()
+
+    // Nothing may re-arm the four-second poll after the fiber unloaded.
+    expect(context.calls).toHaveLength(calls)
   })
 })

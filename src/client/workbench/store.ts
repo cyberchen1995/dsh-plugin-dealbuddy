@@ -1,5 +1,5 @@
 import type { ClientContextLike } from '../scope.js'
-import { callWorkbench, describeFailure } from './rpc.js'
+import { RpcFailure, callWorkbench, describeFailure } from './rpc.js'
 import { offersOf, type SessionSummaryView, type SessionView, type WorkbenchStatusView } from './types.js'
 
 /**
@@ -76,6 +76,12 @@ export class WorkbenchStore {
   #timer: ReturnType<typeof setInterval> | undefined
   #notices = 0
   #trigger: HTMLElement | null = null
+  /** Bumped by every refresh; a response from an older one is abandoned. */
+  #generation = 0
+  /** Set by dispose(); nothing may arm a timer after it. */
+  #disposed = false
+  /** Identity of the session list currently in state, so an unchanged list keeps its array. */
+  #sessionsKey = ''
 
   /**
    * @param ctx - the browser plugin context, used for RPC.
@@ -124,6 +130,11 @@ export class WorkbenchStore {
 
   /** Stop the timer; called when the plugin unloads. */
   dispose(): void {
+    // The flag, not the timer, is what makes this final: a write settling
+    // after disposal still runs its `finally`, and a listener that has not
+    // been torn down yet can still call resume().
+    this.#disposed = true
+    this.#generation += 1
     if (this.#timer !== undefined) clearInterval(this.#timer)
     this.#timer = undefined
     this.#listeners.clear()
@@ -131,9 +142,10 @@ export class WorkbenchStore {
 
   /** Re-read after a reconnect or a tab becoming visible again. */
   resume(): void {
-    if (!this.#state.open) return
+    if (this.#disposed || !this.#state.open) return
     this.#retimer()
     void this.refresh({ silent: true })
+    void this.refreshStatus()
   }
 
   /** Expand or collapse one product card. */
@@ -183,43 +195,65 @@ export class WorkbenchStore {
 
   /**
    * Re-read the session list and the current session.
+   *
+   * Two round trips with no ordering guarantee between them, so every refresh
+   * takes a generation and abandons itself if a newer one started while it was
+   * waiting. Without that, a poll issued before a delete can land after it and
+   * write the deleted product back — and then count it as a fresh capture.
    * @param options - `silent` swallows failures, as the poll does.
    * @returns settlement once the state reflects the Host.
    */
   async refresh(options: { silent?: boolean } = {}): Promise<void> {
+    const generation = ++this.#generation
+    // A poll must not clear an error the user has not read yet; only an
+    // explicit refresh or a new action does that.
+    const settled = options.silent ? {} : { error: null }
     if (!options.silent) this.#set({ loading: true })
     try {
       const listed = await callWorkbench<{
         current_session_id: string | null
         sessions: SessionSummaryView[]
       }>(this.ctx, 'listSessions', {})
+      if (generation !== this.#generation) return
       // Newest first: the session someone is capturing into is the one they
       // just made.
-      const sessions = [...listed.sessions].reverse()
+      const sessions = this.#keepSessions([...listed.sessions].reverse())
       const currentId = listed.current_session_id
       if (currentId === null) {
-        this.#set({ sessions, currentId, session: null, loading: false, error: null })
+        this.#set({ sessions, currentId, session: null, loading: false, ...settled })
         return
       }
+      // The list is committed before the document read so a failing read does
+      // not throw away a list that arrived fine. The pointer is NOT committed
+      // here: `currentId` and `session` have to move together, or a delete
+      // could carry a card's URL into a different session.
+      this.#set({ sessions })
       const session = await callWorkbench<SessionView>(this.ctx, 'showSession', {
         sessionId: currentId,
       })
+      if (generation !== this.#generation) return
       const sameSession = currentId === this.#state.currentId
       const changed = syncKey(session) !== syncKey(this.#state.session)
       if (!sameSession || changed) {
         const before = sameSession ? offersOf(this.#state.session).length : 0
         const after = offersOf(session).length
-        this.#set({ sessions, currentId, session, loading: false, error: null })
+        this.#set({ currentId, session, loading: false, ...settled })
         if (sameSession && after > before) {
           this.#notice(`已同步 ${after - before} 个新采集商品`)
         }
         return
       }
-      this.#set({ sessions, currentId, loading: false, error: null })
+      this.#set({ currentId, loading: false, ...settled })
     } catch (error) {
+      if (generation !== this.#generation) return
+      // A session whose file is gone must not keep rendering its products.
+      if (error instanceof RpcFailure && error.code === 'dealbuddy/session-not-found') {
+        this.#set({ session: null, currentId: null })
+      }
       if (options.silent) {
         // A failed poll retries on the next tick, exactly as the Python
-        // workbench does; only explicit actions report.
+        // workbench does; only explicit actions report — and a poll must not
+        // clear an error the user has not read yet.
         this.#set({ loading: false })
         return
       }
@@ -306,6 +340,7 @@ export class WorkbenchStore {
   /** Start or stop the poll for the current conditions. */
   #retimer(): void {
     const wanted =
+      !this.#disposed &&
       this.#state.open &&
       this.#state.pendingDelete === null &&
       (typeof document === 'undefined' || document.visibilityState === 'visible')
@@ -322,11 +357,34 @@ export class WorkbenchStore {
   }
 
   /**
-   * Replace the state and notify.
+   * Replace the state and notify — but only when something actually moved.
+   *
+   * An idle panel polls every four seconds and almost always finds the same
+   * document; without this check each poll would allocate a fresh snapshot and
+   * re-render the whole drawer for nothing.
    * @param patch - the fields that moved.
    */
   #set(patch: Partial<WorkbenchState>): void {
+    const keys = Object.keys(patch) as (keyof WorkbenchState)[]
+    if (keys.every((key) => Object.is(this.#state[key], patch[key]))) return
     this.#state = { ...this.#state, ...patch }
     for (const listener of this.#listeners) listener()
+  }
+
+  /**
+   * Keep the previous session array when the list did not change.
+   *
+   * The Host returns fresh objects every poll, so identity has to be re-derived
+   * from the contents for {@link #set}'s check to mean anything.
+   * @param sessions - the newly read list, already in display order.
+   * @returns the list to store, reusing the current array when equivalent.
+   */
+  #keepSessions(sessions: SessionSummaryView[]): SessionSummaryView[] {
+    const key = sessions
+      .map((entry) => `${entry.session_id}|${entry.updated_at}|${entry.verified_count}|${entry.category}`)
+      .join('\u0000')
+    if (key === this.#sessionsKey) return this.#state.sessions
+    this.#sessionsKey = key
+    return sessions
   }
 }

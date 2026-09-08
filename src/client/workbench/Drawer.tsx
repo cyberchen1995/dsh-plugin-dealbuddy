@@ -26,22 +26,6 @@ export function WorkbenchDrawer(props: { store: WorkbenchStore }): JSX.Element |
   const open = state.open
   const dialogOpen = state.pendingDelete !== null
 
-  // Escape closes the confirmation first, then the drawer: the innermost layer
-  // is the one a person means to dismiss.
-  useEffect(() => {
-    if (!open) return undefined
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      event.stopPropagation()
-      if (dialogOpen) store.askDelete(null)
-      else store.close()
-    }
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown, true)
-    }
-  }, [open, dialogOpen, store])
-
   useEffect(() => {
     if (open) rootRef.current?.focus()
   }, [open])
@@ -74,6 +58,15 @@ export function WorkbenchDrawer(props: { store: WorkbenchStore }): JSX.Element |
       aria-label="DealBuddy 工作台"
       tabIndex={-1}
       ref={rootRef}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return
+        // Scoped to the drawer's own subtree on purpose: a capture-phase
+        // listener on document would swallow the Escape the harness's own
+        // editors and popovers need while the panel sits open beside them.
+        event.stopPropagation()
+        if (dialogOpen) store.askDelete(null)
+        else store.close()
+      }}
     >
       <div className="db-wb-head">
         <h2 className="db-wb-title">DealBuddy 工作台</h2>
@@ -136,7 +129,7 @@ export function WorkbenchDrawer(props: { store: WorkbenchStore }): JSX.Element |
               const url = text(offer.url)
               return (
                 <OfferCard
-                  key={url === '' ? String(index) : url}
+                  key={url === '' ? `index:${index}` : `url:${url}`}
                   offer={offer}
                   index={index}
                   open={state.openUrls.includes(url)}
@@ -207,13 +200,18 @@ export function WorkbenchDrawer(props: { store: WorkbenchStore }): JSX.Element |
  * @returns the notice.
  */
 function Notice(props: { text: string; onDone: () => void }): JSX.Element {
-  const { onDone } = props
+  // The caller passes a fresh closure every render, so the timer is armed once
+  // per notice (the element is keyed by sequence) and read through a ref.
+  const onDone = useRef(props.onDone)
+  onDone.current = props.onDone
   useEffect(() => {
-    const timer = setTimeout(onDone, 2600)
+    const timer = setTimeout(() => {
+      onDone.current()
+    }, 2600)
     return () => {
       clearTimeout(timer)
     }
-  }, [onDone])
+  }, [])
   return (
     <div className="db-wb-notice" role="status">
       {props.text}

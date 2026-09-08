@@ -17,6 +17,9 @@ export interface IntakeProbe {
   reason?: string
 }
 
+/** A port that accepts the connection but never answers must not hang the caller. */
+const PROBE_TIMEOUT_MS = 2000
+
 /**
  * Send the extension's own preflight to the configured port.
  * @param port - the configured intake port.
@@ -32,7 +35,7 @@ export async function probeIntakeListener(
     const response = await fetch(url, {
       method: 'OPTIONS',
       headers: { Origin: 'https://item.jd.com' },
-      signal,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
     })
     if (response.status !== 204) {
       return { ok: false, url, reason: `${url} answered ${response.status}` }

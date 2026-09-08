@@ -288,17 +288,27 @@ body[data-ds-dark-theme] [data-dealbuddy-workbench] {
 `
 
 /**
- * Add the stylesheet to the document once.
+ * Add the stylesheet to the document, and take it away again on unload.
  *
  * A plugin's client bundle can be evaluated more than once across a reload, so
- * the tag carries an id and a second call is a no-op.
+ * the tag carries an id and a second call adopts the existing node rather than
+ * adding a second one.
+ * @returns the disposer removing the stylesheet this call added.
  */
-export function ensureWorkbenchStyles(): void {
-  if (typeof document === 'undefined') return
+export function ensureWorkbenchStyles(): () => void {
+  if (typeof document === 'undefined') return () => undefined
   const selector = `style[data-plugin-css=${JSON.stringify(TAG_ID)}]`
-  if (document.querySelector(selector) !== null) return
+  const existing = document.querySelector(selector)
+  if (existing !== null) {
+    return () => {
+      existing.remove()
+    }
+  }
   const tag = document.createElement('style')
   tag.dataset['pluginCss'] = TAG_ID
   tag.textContent = CSS
   document.head.append(tag)
+  return () => {
+    tag.remove()
+  }
 }

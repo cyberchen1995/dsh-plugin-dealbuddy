@@ -37,7 +37,6 @@ export function apply(ctx: unknown): void {
     ),
   )
 
-  ensureWorkbenchStyles()
   const store = new WorkbenchStore(client)
 
   client.slots.inject('sidebar.footer.action', () =>
@@ -56,12 +55,14 @@ export function apply(ctx: unknown): void {
   // A reconnect means the Host may have restarted under us; re-read rather
   // than keep showing a session list from before.
   client.effect(() => {
+    const removeStyles = ensureWorkbenchStyles()
     const off = client.on('connection/reset', () => {
       store.resume()
     })
     return () => {
       off()
       store.dispose()
+      removeStyles()
     }
   })
 }

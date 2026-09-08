@@ -140,14 +140,15 @@ export class DealbuddyRemote extends TypertRemoteService {
    */
   @Remote
   async createSession(category: string, request?: string): Promise<{ session_id: string }> {
-    const trimmed = typeof category === 'string' ? category.trim() : ''
-    if (trimmed === '') {
+    // Validated on the trimmed value but stored as sent: the tool face does
+    // not trim either, and the two faces have to write the same file.
+    if (typeof category !== 'string' || category.trim() === '') {
       throw new RemoteError('gateway/bad-request', 'category is required', {})
     }
     if (request !== undefined && typeof request !== 'string') {
       throw new RemoteError('gateway/bad-request', 'request must be a string', {})
     }
-    const created = await createSession(this.store, trimmed, request ?? '')
+    const created = await createSession(this.store, category, request ?? '')
     return { session_id: created.current_session_id }
   }
 
