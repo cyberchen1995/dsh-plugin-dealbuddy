@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
-import { DEALBUDDY_SETTINGS_NAMESPACE, DEALBUDDY_SETTINGS_SCHEMA } from '../../src/settings.js'
+import {
+  DEALBUDDY_SETTINGS_NAMESPACE,
+  DEALBUDDY_SETTINGS_SCHEMA,
+  type DealbuddySettings,
+} from '../../src/settings.js'
+
+/**
+ * Resolve a stored section the way the provider does.
+ *
+ * Schemastery's call signature asks for the complete type, but filling the
+ * gaps is exactly what resolution does, and a stored section is partial by
+ * construction.
+ * @param section - the stored user section.
+ * @returns the resolved settings.
+ */
+function resolve(section: Partial<DealbuddySettings>): DealbuddySettings {
+  return (DEALBUDDY_SETTINGS_SCHEMA as unknown as (value: unknown) => DealbuddySettings)(section)
+}
 
 /**
  * The card's contract with the harness.
@@ -18,7 +35,7 @@ describe('settings namespace', () => {
   })
 
   it('resolves the same defaults as the composition entry', () => {
-    expect(DEALBUDDY_SETTINGS_SCHEMA({})).toEqual({
+    expect(resolve({})).toEqual({
       port: 8765,
       dataDir: '',
       extraAllowedDomains: [],
@@ -28,14 +45,14 @@ describe('settings namespace', () => {
   })
 
   it('refuses a port outside the range, so a bad card write cannot land', () => {
-    expect(() => DEALBUDDY_SETTINGS_SCHEMA({ port: 99999 })).toThrow()
-    expect(() => DEALBUDDY_SETTINGS_SCHEMA({ port: 0 })).toThrow()
+    expect(() => resolve({ port: 99999 })).toThrow()
+    expect(() => resolve({ port: 0 })).toThrow()
   })
 
   it('refuses a domain that is not a host suffix', () => {
-    expect(() => DEALBUDDY_SETTINGS_SCHEMA({ extraAllowedDomains: ['https://x.com'] })).toThrow()
+    expect(() => resolve({ extraAllowedDomains: ['https://x.com'] })).toThrow()
     expect(
-      DEALBUDDY_SETTINGS_SCHEMA({ extraAllowedDomains: ['shop.example.com'] }).extraAllowedDomains,
+      resolve({ extraAllowedDomains: ['shop.example.com'] }).extraAllowedDomains,
     ).toEqual(['shop.example.com'])
   })
 })
