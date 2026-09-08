@@ -1,0 +1,443 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "rank_and_report"
+  },
+  "cases": [
+    {
+      "name": "tv digest drops the mid-ranked eligible offer",
+      "input": {
+        "requirements": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内，65 英寸，主要看电影",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        },
+        "offers": [
+          {
+            "platform": "jd",
+            "title": "示例牌 DB-65A 65英寸 4K 120Hz Mini LED 电视",
+            "url": "https://item.jd.com/100000000001.html",
+            "store_name": "示例牌官方旗舰店",
+            "brand": null,
+            "model": null,
+            "specs": {
+              "屏幕尺寸": "65英寸",
+              "刷新率": "120Hz"
+            },
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "4599.00",
+            "coupon": null,
+            "estimated_payable": "4599.00",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": "120Hz 高刷，画质配置突出。",
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "high"
+          },
+          {
+            "platform": "tmall",
+            "title": "样板电视 S65 65英寸 4K 60Hz",
+            "url": "https://detail.tmall.com/item.htm?id=900000000002",
+            "store_name": "样板电视旗舰店",
+            "brand": null,
+            "model": null,
+            "specs": {
+              "屏幕尺寸": "65英寸"
+            },
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "3299",
+            "coupon": null,
+            "estimated_payable": "3299",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": null,
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "medium"
+          },
+          {
+            "platform": "taobao",
+            "title": "假想牌 Q75 75英寸 QLED 电视",
+            "url": "https://item.taobao.com/item.htm?id=900000000003",
+            "store_name": "假想牌数码专营店",
+            "brand": null,
+            "model": null,
+            "specs": {
+              "屏幕尺寸": "75英寸"
+            },
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "6899.00",
+            "coupon": null,
+            "estimated_payable": "6899.00",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": null,
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "high"
+          }
+        ]
+      },
+      "expected": {
+        "order": [
+          "https://detail.tmall.com/item.htm?id=900000000002",
+          "https://item.jd.com/100000000001.html",
+          "https://item.taobao.com/item.htm?id=900000000003"
+        ],
+        "ranked": [
+          {
+            "url": "https://detail.tmall.com/item.htm?id=900000000002",
+            "score": 47.1,
+            "hard_requirements_met": true,
+            "matched_requirements": [
+              "screen_size=65英寸"
+            ],
+            "unmet_requirements": [],
+            "reasons": [
+              "screen_size=65英寸",
+              "页面价格 3299",
+              "店铺 样板电视旗舰店"
+            ]
+          },
+          {
+            "url": "https://item.jd.com/100000000001.html",
+            "score": 43.2,
+            "hard_requirements_met": true,
+            "matched_requirements": [
+              "screen_size=65英寸"
+            ],
+            "unmet_requirements": [],
+            "reasons": [
+              "screen_size=65英寸",
+              "页面价格 4599.00",
+              "店铺 示例牌官方旗舰店"
+            ]
+          },
+          {
+            "url": "https://item.taobao.com/item.htm?id=900000000003",
+            "score": -90.0,
+            "hard_requirements_met": false,
+            "matched_requirements": [],
+            "unmet_requirements": [
+              "screen_size=65英寸"
+            ],
+            "reasons": [
+              "页面价格 6899.00",
+              "店铺 假想牌数码专营店"
+            ]
+          }
+        ],
+        "report_markdown": "# DealBuddy 选品报告：电视\n\n需求版本：v1\n\n> 价格来自页面可见信息。估算应付只计算页面明确展示且可直接解析的优惠，不代表结算价格。\n\n## 最符合需求\n- 商品：[样板电视 S65 65英寸 4K 60Hz](https://detail.tmall.com/item.htm?id=900000000002)\n- 平台：tmall\n- 店铺：样板电视旗舰店\n- 匹配分：47.10\n- SKU：页面未明确\n- 页面展示价：¥3299\n- 估算应付：¥3299\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：medium\n\n## 最低预算\n- 商品：[样板电视 S65 65英寸 4K 60Hz](https://detail.tmall.com/item.htm?id=900000000002)\n- 平台：tmall\n- 店铺：样板电视旗舰店\n- 匹配分：47.10\n- SKU：页面未明确\n- 页面展示价：¥3299\n- 估算应付：¥3299\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：medium\n\n## 综合性价比\n- 商品：[样板电视 S65 65英寸 4K 60Hz](https://detail.tmall.com/item.htm?id=900000000002)\n- 平台：tmall\n- 店铺：样板电视旗舰店\n- 匹配分：47.10\n- SKU：页面未明确\n- 页面展示价：¥3299\n- 估算应付：¥3299\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：medium\n\n## 值得加预算\n暂无满足条件的候选。\n\n## 不推荐项\n- 商品：[假想牌 Q75 75英寸 QLED 电视](https://item.taobao.com/item.htm?id=900000000003)\n- 平台：taobao\n- 店铺：假想牌数码专营店\n- 匹配分：-90.00\n- SKU：页面未明确\n- 页面展示价：¥6899.00\n- 估算应付：¥6899.00\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n- 未满足：screen_size=65英寸\n"
+      }
+    },
+    {
+      "name": "equal scores keep input order",
+      "input": {
+        "requirements": {
+          "category": "耳机",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": "1000",
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        },
+        "offers": [
+          {
+            "platform": "jd",
+            "title": "并列 A",
+            "url": "https://item.jd.com/200000000001.html",
+            "store_name": "并列旗舰店",
+            "brand": null,
+            "model": null,
+            "specs": {},
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "800",
+            "coupon": null,
+            "estimated_payable": "800",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": null,
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "high"
+          },
+          {
+            "platform": "jd",
+            "title": "并列 B",
+            "url": "https://item.jd.com/200000000002.html",
+            "store_name": "另一家旗舰店",
+            "brand": null,
+            "model": null,
+            "specs": {},
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "800",
+            "coupon": null,
+            "estimated_payable": "800",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": null,
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "high"
+          }
+        ]
+      },
+      "expected": {
+        "order": [
+          "https://item.jd.com/200000000001.html",
+          "https://item.jd.com/200000000002.html"
+        ],
+        "ranked": [
+          {
+            "url": "https://item.jd.com/200000000001.html",
+            "score": 20.0,
+            "hard_requirements_met": true,
+            "matched_requirements": [],
+            "unmet_requirements": [],
+            "reasons": [
+              "页面价格 800",
+              "店铺 并列旗舰店"
+            ]
+          },
+          {
+            "url": "https://item.jd.com/200000000002.html",
+            "score": 20.0,
+            "hard_requirements_met": true,
+            "matched_requirements": [],
+            "unmet_requirements": [],
+            "reasons": [
+              "页面价格 800",
+              "店铺 另一家旗舰店"
+            ]
+          }
+        ],
+        "report_markdown": "# DealBuddy 选品报告：耳机\n\n需求版本：v1\n\n> 价格来自页面可见信息。估算应付只计算页面明确展示且可直接解析的优惠，不代表结算价格。\n\n## 最符合需求\n- 商品：[并列 A](https://item.jd.com/200000000001.html)\n- 平台：jd\n- 店铺：并列旗舰店\n- 匹配分：20.00\n- SKU：页面未明确\n- 页面展示价：¥800\n- 估算应付：¥800\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n\n## 最低预算\n- 商品：[并列 A](https://item.jd.com/200000000001.html)\n- 平台：jd\n- 店铺：并列旗舰店\n- 匹配分：20.00\n- SKU：页面未明确\n- 页面展示价：¥800\n- 估算应付：¥800\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n\n## 综合性价比\n- 商品：[并列 A](https://item.jd.com/200000000001.html)\n- 平台：jd\n- 店铺：并列旗舰店\n- 匹配分：20.00\n- SKU：页面未明确\n- 页面展示价：¥800\n- 估算应付：¥800\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n\n## 值得加预算\n暂无满足条件的候选。\n\n## 不推荐项\n暂无明确不推荐项。\n"
+      }
+    },
+    {
+      "name": "stretch slot picks the over-budget eligible offer",
+      "input": {
+        "requirements": {
+          "category": "投影仪",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": "4000",
+          "use_cases": [],
+          "must_have": {
+            "分辨率": "4K"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        },
+        "offers": [
+          {
+            "platform": "jd",
+            "title": "超预算但合规的 4K 投影",
+            "url": "https://item.jd.com/300000000001.html",
+            "store_name": "示例牌官方旗舰店",
+            "brand": null,
+            "model": null,
+            "specs": {
+              "分辨率": "4K"
+            },
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "5200",
+            "coupon": null,
+            "estimated_payable": "5200",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": null,
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "high"
+          },
+          {
+            "platform": "jd",
+            "title": "预算内的 4K 投影",
+            "url": "https://item.jd.com/300000000002.html",
+            "store_name": "示例牌官方旗舰店",
+            "brand": null,
+            "model": null,
+            "specs": {
+              "分辨率": "4K"
+            },
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "3600.50",
+            "coupon": null,
+            "estimated_payable": "3600.50",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": null,
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "high"
+          }
+        ]
+      },
+      "expected": {
+        "order": [
+          "https://item.jd.com/300000000002.html",
+          "https://item.jd.com/300000000001.html"
+        ],
+        "ranked": [
+          {
+            "url": "https://item.jd.com/300000000002.html",
+            "score": 43.5,
+            "hard_requirements_met": true,
+            "matched_requirements": [
+              "分辨率=4K"
+            ],
+            "unmet_requirements": [],
+            "reasons": [
+              "分辨率=4K",
+              "页面价格 3600.50",
+              "店铺 示例牌官方旗舰店"
+            ]
+          },
+          {
+            "url": "https://item.jd.com/300000000001.html",
+            "score": 3.0,
+            "hard_requirements_met": true,
+            "matched_requirements": [
+              "分辨率=4K"
+            ],
+            "unmet_requirements": [],
+            "reasons": [
+              "分辨率=4K",
+              "页面价格 5200",
+              "店铺 示例牌官方旗舰店"
+            ]
+          }
+        ],
+        "report_markdown": "# DealBuddy 选品报告：投影仪\n\n需求版本：v1\n\n> 价格来自页面可见信息。估算应付只计算页面明确展示且可直接解析的优惠，不代表结算价格。\n\n## 最符合需求\n- 商品：[预算内的 4K 投影](https://item.jd.com/300000000002.html)\n- 平台：jd\n- 店铺：示例牌官方旗舰店\n- 匹配分：43.50\n- SKU：页面未明确\n- 页面展示价：¥3600.50\n- 估算应付：¥3600.50\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n\n## 最低预算\n- 商品：[预算内的 4K 投影](https://item.jd.com/300000000002.html)\n- 平台：jd\n- 店铺：示例牌官方旗舰店\n- 匹配分：43.50\n- SKU：页面未明确\n- 页面展示价：¥3600.50\n- 估算应付：¥3600.50\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n\n## 综合性价比\n- 商品：[预算内的 4K 投影](https://item.jd.com/300000000002.html)\n- 平台：jd\n- 店铺：示例牌官方旗舰店\n- 匹配分：43.50\n- SKU：页面未明确\n- 页面展示价：¥3600.50\n- 估算应付：¥3600.50\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n\n## 值得加预算\n- 商品：[超预算但合规的 4K 投影](https://item.jd.com/300000000001.html)\n- 平台：jd\n- 店铺：示例牌官方旗舰店\n- 匹配分：3.00\n- SKU：页面未明确\n- 页面展示价：¥5200\n- 估算应付：¥5200\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n\n## 不推荐项\n暂无明确不推荐项。\n"
+      }
+    },
+    {
+      "name": "no offers at all",
+      "input": {
+        "requirements": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内，65 英寸，主要看电影",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        },
+        "offers": []
+      },
+      "expected": {
+        "order": [],
+        "ranked": [],
+        "report_markdown": "# DealBuddy 选品报告：电视\n\n需求版本：v1\n\n> 价格来自页面可见信息。估算应付只计算页面明确展示且可直接解析的优惠，不代表结算价格。\n\n## 最符合需求\n暂无满足条件的候选。\n\n## 最低预算\n暂无满足条件的候选。\n\n## 综合性价比\n暂无满足条件的候选。\n\n## 值得加预算\n暂无满足条件的候选。\n\n## 不推荐项\n暂无明确不推荐项。\n"
+      }
+    },
+    {
+      "name": "every offer rejected",
+      "input": {
+        "requirements": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内，65 英寸，主要看电影",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        },
+        "offers": [
+          {
+            "platform": "jd",
+            "title": "太小的电视",
+            "url": "https://item.jd.com/100000000001.html",
+            "store_name": "示例牌官方旗舰店",
+            "brand": null,
+            "model": null,
+            "specs": {
+              "屏幕尺寸": "43英寸"
+            },
+            "sku": null,
+            "listed_price": null,
+            "visible_price": "4599.00",
+            "coupon": null,
+            "estimated_payable": "4599.00",
+            "conditions": [],
+            "stock": null,
+            "parameters": {},
+            "llm_summary": null,
+            "verified_at": "2026-03-04T05:06:07.890123Z",
+            "confidence": "high"
+          }
+        ]
+      },
+      "expected": {
+        "order": [
+          "https://item.jd.com/100000000001.html"
+        ],
+        "ranked": [
+          {
+            "url": "https://item.jd.com/100000000001.html",
+            "score": -41.8,
+            "hard_requirements_met": false,
+            "matched_requirements": [],
+            "unmet_requirements": [
+              "screen_size=65英寸"
+            ],
+            "reasons": [
+              "页面价格 4599.00",
+              "店铺 示例牌官方旗舰店"
+            ]
+          }
+        ],
+        "report_markdown": "# DealBuddy 选品报告：电视\n\n需求版本：v1\n\n> 价格来自页面可见信息。估算应付只计算页面明确展示且可直接解析的优惠，不代表结算价格。\n\n## 最符合需求\n暂无满足条件的候选。\n\n## 最低预算\n暂无满足条件的候选。\n\n## 综合性价比\n暂无满足条件的候选。\n\n## 值得加预算\n暂无满足条件的候选。\n\n## 不推荐项\n- 商品：[太小的电视](https://item.jd.com/100000000001.html)\n- 平台：jd\n- 店铺：示例牌官方旗舰店\n- 匹配分：-41.80\n- SKU：页面未明确\n- 页面展示价：¥4599.00\n- 估算应付：¥4599.00\n- 复核时间：2026-03-04T05:06:07.890123+00:00\n- 数据可信度：high\n- 未满足：screen_size=65英寸\n"
+      }
+    }
+  ]
+}

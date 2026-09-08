@@ -1,0 +1,298 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "merge_requirements"
+  },
+  "cases": [
+    {
+      "name": "same category: dict shallow-merge and list union",
+      "input": {
+        "current": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内",
+          "version": 3,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影",
+            "游戏"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {
+            "panel_type": "OLED"
+          },
+          "exclusions": [
+            "翻新"
+          ],
+          "brands": [
+            "示例牌"
+          ],
+          "after_sales": [
+            "上门安装"
+          ]
+        },
+        "changes": {
+          "must_have": {
+            "refresh_rate": "120Hz"
+          },
+          "use_cases": [
+            "电影",
+            "体育"
+          ],
+          "budget_max": "6000"
+        }
+      },
+      "expected": {
+        "category": "电视",
+        "raw_request": "预算 5000 以内",
+        "version": 4,
+        "budget_min": null,
+        "budget_max": "6000",
+        "use_cases": [
+          "电影",
+          "游戏",
+          "体育"
+        ],
+        "must_have": {
+          "screen_size": "65英寸",
+          "refresh_rate": "120Hz"
+        },
+        "preferences": {
+          "panel_type": "OLED"
+        },
+        "exclusions": [
+          "翻新"
+        ],
+        "brands": [
+          "示例牌"
+        ],
+        "after_sales": [
+          "上门安装"
+        ]
+      }
+    },
+    {
+      "name": "same category: empty changes still bumps the version",
+      "input": {
+        "current": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内",
+          "version": 3,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影",
+            "游戏"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {
+            "panel_type": "OLED"
+          },
+          "exclusions": [
+            "翻新"
+          ],
+          "brands": [
+            "示例牌"
+          ],
+          "after_sales": [
+            "上门安装"
+          ]
+        },
+        "changes": {}
+      },
+      "expected": {
+        "category": "电视",
+        "raw_request": "预算 5000 以内",
+        "version": 4,
+        "budget_min": null,
+        "budget_max": "5000",
+        "use_cases": [
+          "电影",
+          "游戏"
+        ],
+        "must_have": {
+          "screen_size": "65英寸"
+        },
+        "preferences": {
+          "panel_type": "OLED"
+        },
+        "exclusions": [
+          "翻新"
+        ],
+        "brands": [
+          "示例牌"
+        ],
+        "after_sales": [
+          "上门安装"
+        ]
+      }
+    },
+    {
+      "name": "category change: full reset to v1",
+      "input": {
+        "current": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内",
+          "version": 3,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影",
+            "游戏"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {
+            "panel_type": "OLED"
+          },
+          "exclusions": [
+            "翻新"
+          ],
+          "brands": [
+            "示例牌"
+          ],
+          "after_sales": [
+            "上门安装"
+          ]
+        },
+        "changes": {
+          "category": "投影仪",
+          "budget_max": "3000"
+        }
+      },
+      "expected": {
+        "category": "投影仪",
+        "raw_request": "",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": "3000",
+        "use_cases": [],
+        "must_have": {},
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    },
+    {
+      "name": "category change keeping nothing else",
+      "input": {
+        "current": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内",
+          "version": 3,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影",
+            "游戏"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {
+            "panel_type": "OLED"
+          },
+          "exclusions": [
+            "翻新"
+          ],
+          "brands": [
+            "示例牌"
+          ],
+          "after_sales": [
+            "上门安装"
+          ]
+        },
+        "changes": {
+          "category": "投影仪"
+        }
+      },
+      "expected": {
+        "category": "投影仪",
+        "raw_request": "",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": null,
+        "use_cases": [],
+        "must_have": {},
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    },
+    {
+      "name": "same category via explicit identical category",
+      "input": {
+        "current": {
+          "category": "电视",
+          "raw_request": "预算 5000 以内",
+          "version": 3,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [
+            "电影",
+            "游戏"
+          ],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {
+            "panel_type": "OLED"
+          },
+          "exclusions": [
+            "翻新"
+          ],
+          "brands": [
+            "示例牌"
+          ],
+          "after_sales": [
+            "上门安装"
+          ]
+        },
+        "changes": {
+          "category": "电视",
+          "exclusions": [
+            "样机"
+          ]
+        }
+      },
+      "expected": {
+        "category": "电视",
+        "raw_request": "预算 5000 以内",
+        "version": 4,
+        "budget_min": null,
+        "budget_max": "5000",
+        "use_cases": [
+          "电影",
+          "游戏"
+        ],
+        "must_have": {
+          "screen_size": "65英寸"
+        },
+        "preferences": {
+          "panel_type": "OLED"
+        },
+        "exclusions": [
+          "翻新",
+          "样机"
+        ],
+        "brands": [
+          "示例牌"
+        ],
+        "after_sales": [
+          "上门安装"
+        ]
+      }
+    }
+  ]
+}

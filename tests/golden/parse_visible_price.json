@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "parse_visible_price"
+  },
+  "cases": [
+    {
+      "name": "4599.00",
+      "input": {
+        "value": "4599.00"
+      },
+      "expected": "4599.00"
+    },
+    {
+      "name": "¥4,599",
+      "input": {
+        "value": "¥4,599"
+      },
+      "expected": "4599"
+    },
+    {
+      "name": "￥４５９９.００",
+      "input": {
+        "value": "￥４５９９.００"
+      },
+      "expected": "4599.00"
+    },
+    {
+      "name": "3999-4599",
+      "input": {
+        "value": "3999-4599"
+      },
+      "expected": "3999"
+    },
+    {
+      "name": "到手价 4299 元",
+      "input": {
+        "value": "到手价 4299 元"
+      },
+      "expected": "4299"
+    },
+    {
+      "name": "0",
+      "input": {
+        "value": "0"
+      },
+      "expected": "0"
+    },
+    {
+      "name": "暂无报价",
+      "input": {
+        "value": "暂无报价"
+      },
+      "expected": null
+    },
+    {
+      "name": "None",
+      "input": {
+        "value": null
+      },
+      "expected": null
+    }
+  ]
+}

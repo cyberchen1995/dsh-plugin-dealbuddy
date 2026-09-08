@@ -1,0 +1,172 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "capture_to_verified_offer"
+  },
+  "cases": [
+    {
+      "name": "full payload with extension-only keys ignored",
+      "input": {
+        "payload": {
+          "platform": "jd",
+          "url": "https://item.jd.com/100000000001.html",
+          "title": "  示例牌 DB-65A 65英寸 电视  ",
+          "visible_price": "¥4,599.00",
+          "store_name": "示例牌官方旗舰店",
+          "sku_id": "60870229",
+          "sku_text": "65英寸 / 曜石黑 / 单机",
+          "selected_sku_text": "忽略我",
+          "specs": {
+            "屏幕尺寸": "65英寸",
+            "刷新率": "120Hz"
+          },
+          "ocr_text": "自拟 OCR 文本",
+          "confidence": "high",
+          "image_url": "https://example.invalid/a.jpg",
+          "gallery_image_urls": [
+            "https://example.invalid/b.jpg"
+          ],
+          "detail_text": "扩展会发但服务端不存的字段",
+          "ocr_status": "completed",
+          "warnings": []
+        }
+      },
+      "expected": {
+        "platform": "jd",
+        "title": "示例牌 DB-65A 65英寸 电视",
+        "url": "https://item.jd.com/100000000001.html",
+        "store_name": "示例牌官方旗舰店",
+        "brand": null,
+        "model": null,
+        "specs": {
+          "屏幕尺寸": "65英寸",
+          "刷新率": "120Hz"
+        },
+        "sku": "65英寸 / 曜石黑 / 单机",
+        "listed_price": null,
+        "visible_price": "4599.00",
+        "coupon": null,
+        "estimated_payable": "4599.00",
+        "conditions": [],
+        "stock": null,
+        "parameters": {
+          "sku_id": "60870229",
+          "ocr_text": "自拟 OCR 文本"
+        },
+        "llm_summary": null,
+        "verified_at": "2026-03-04T05:06:07.890123Z",
+        "confidence": "high"
+      }
+    },
+    {
+      "name": "sku falls back to selected_sku_text",
+      "input": {
+        "payload": {
+          "platform": "tmall",
+          "url": "https://detail.tmall.com/item.htm?id=900000000002",
+          "title": "样板电视 S65",
+          "visible_price": "3299",
+          "selected_sku_text": "65英寸 / 白色",
+          "specs": {}
+        }
+      },
+      "expected": {
+        "platform": "tmall",
+        "title": "样板电视 S65",
+        "url": "https://detail.tmall.com/item.htm?id=900000000002",
+        "store_name": null,
+        "brand": null,
+        "model": null,
+        "specs": {},
+        "sku": "65英寸 / 白色",
+        "listed_price": null,
+        "visible_price": "3299",
+        "coupon": null,
+        "estimated_payable": "3299",
+        "conditions": [],
+        "stock": null,
+        "parameters": {},
+        "llm_summary": null,
+        "verified_at": "2026-03-04T05:06:07.890123Z",
+        "confidence": "medium"
+      }
+    },
+    {
+      "name": "unparsable price becomes null",
+      "input": {
+        "payload": {
+          "platform": "taobao",
+          "url": "https://item.taobao.com/item.htm?id=900000000003",
+          "title": "假想牌 Q75",
+          "visible_price": "暂无报价",
+          "specs": {},
+          "confidence": "low"
+        }
+      },
+      "expected": {
+        "platform": "taobao",
+        "title": "假想牌 Q75",
+        "url": "https://item.taobao.com/item.htm?id=900000000003",
+        "store_name": null,
+        "brand": null,
+        "model": null,
+        "specs": {},
+        "sku": null,
+        "listed_price": null,
+        "visible_price": null,
+        "coupon": null,
+        "estimated_payable": null,
+        "conditions": [],
+        "stock": null,
+        "parameters": {},
+        "llm_summary": null,
+        "verified_at": "2026-03-04T05:06:07.890123Z",
+        "confidence": "low"
+      }
+    },
+    {
+      "name": "integer-like spec keys keep insertion order",
+      "input": {
+        "payload": {
+          "platform": "jd",
+          "url": "https://item.jd.com/100000000004.html",
+          "title": "整数样键测试",
+          "visible_price": "1999",
+          "specs": {
+            "2": "第二",
+            "1": "第一",
+            "屏幕尺寸": "55英寸"
+          }
+        }
+      },
+      "expected": {
+        "platform": "jd",
+        "title": "整数样键测试",
+        "url": "https://item.jd.com/100000000004.html",
+        "store_name": null,
+        "brand": null,
+        "model": null,
+        "specs": {
+          "2": "第二",
+          "1": "第一",
+          "屏幕尺寸": "55英寸"
+        },
+        "sku": null,
+        "listed_price": null,
+        "visible_price": "1999",
+        "coupon": null,
+        "estimated_payable": "1999",
+        "conditions": [],
+        "stock": null,
+        "parameters": {},
+        "llm_summary": null,
+        "verified_at": "2026-03-04T05:06:07.890123Z",
+        "confidence": "medium"
+      }
+    }
+  ]
+}

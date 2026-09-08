@@ -1,0 +1,147 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "initial_requirements"
+  },
+  "cases": [
+    {
+      "name": "电视|预算 5000 以内，65 英寸，主要看电影",
+      "input": {
+        "category": "电视",
+        "request": "预算 5000 以内，65 英寸，主要看电影"
+      },
+      "expected": {
+        "category": "电视",
+        "raw_request": "预算 5000 以内，65 英寸，主要看电影",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": "5000",
+        "use_cases": [
+          "电影"
+        ],
+        "must_have": {
+          "screen_size": "65英寸"
+        },
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    },
+    {
+      "name": "电视|不超过 3999 元，55吋，老人和孩子都看，顺便打游戏",
+      "input": {
+        "category": "电视",
+        "request": "不超过 3999 元，55吋，老人和孩子都看，顺便打游戏"
+      },
+      "expected": {
+        "category": "电视",
+        "raw_request": "不超过 3999 元，55吋，老人和孩子都看，顺便打游戏",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": "3999",
+        "use_cases": [
+          "游戏",
+          "老人",
+          "儿童"
+        ],
+        "must_have": {
+          "screen_size": "55英寸"
+        },
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    },
+    {
+      "name": "电饭煲|4 升左右，家用",
+      "input": {
+        "category": "电饭煲",
+        "request": "4 升左右，家用"
+      },
+      "expected": {
+        "category": "电饭煲",
+        "raw_request": "4 升左右，家用",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": null,
+        "use_cases": [],
+        "must_have": {},
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    },
+    {
+      "name": "显示器|27寸，办公和学习为主",
+      "input": {
+        "category": "显示器",
+        "request": "27寸，办公和学习为主"
+      },
+      "expected": {
+        "category": "显示器",
+        "raw_request": "27寸，办公和学习为主",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": null,
+        "use_cases": [
+          "办公",
+          "学习"
+        ],
+        "must_have": {
+          "screen_size": "27英寸"
+        },
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    },
+    {
+      "name": "耳机|(empty)",
+      "input": {
+        "category": "耳机",
+        "request": ""
+      },
+      "expected": {
+        "category": "耳机",
+        "raw_request": "",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": null,
+        "use_cases": [],
+        "must_have": {},
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    },
+    {
+      "name": "电视|预算 ５０００ 以内",
+      "input": {
+        "category": "电视",
+        "request": "预算 ５０００ 以内"
+      },
+      "expected": {
+        "category": "电视",
+        "raw_request": "预算 ５０００ 以内",
+        "version": 1,
+        "budget_min": null,
+        "budget_max": "5000",
+        "use_cases": [],
+        "must_have": {},
+        "preferences": {},
+        "exclusions": [],
+        "brands": [],
+        "after_sales": []
+      }
+    }
+  ]
+}

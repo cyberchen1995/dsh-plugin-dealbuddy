@@ -1,0 +1,763 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "score_offer"
+  },
+  "cases": [
+    {
+      "name": "must_have matched via specs",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 38.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [
+          "screen_size=65英寸"
+        ],
+        "unmet_requirements": [],
+        "reasons": [
+          "screen_size=65英寸",
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "must_have unmet is a hard failure",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-55A 55英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "55英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {
+            "screen_size": "65英寸"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": -47.0,
+        "hard_requirements_met": false,
+        "matched_requirements": [],
+        "unmet_requirements": [
+          "screen_size=65英寸"
+        ],
+        "reasons": [
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "alias table: heating_type matches 速热 in the title",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌速热电热水器",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {},
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "热水器",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {
+            "heating_type": "即热式"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 38.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [
+          "heating_type=即热式"
+        ],
+        "unmet_requirements": [],
+        "reasons": [
+          "heating_type=即热式",
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "alias table: sterilization matches 紫外杀菌",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌紫外杀菌净水器",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {},
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "净水器",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {
+            "sterilization": "UV杀菌"
+          },
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 38.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [
+          "sterilization=UV杀菌"
+        ],
+        "unmet_requirements": [],
+        "reasons": [
+          "sterilization=UV杀菌",
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "preference adds eight",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "显示技术": "OLED"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {
+            "panel_type": "OLED"
+          },
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 21.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [
+          "panel_type=OLED"
+        ],
+        "unmet_requirements": [],
+        "reasons": [
+          "panel_type=OLED",
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "exclusion subtracts eighty",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 翻新机",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [
+            "翻新"
+          ],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": -67.0,
+        "hard_requirements_met": false,
+        "matched_requirements": [],
+        "unmet_requirements": [
+          "排除项:翻新"
+        ],
+        "reasons": [
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "brand allowed",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [
+            "示例牌"
+          ],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 23.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [
+          "品牌限制:示例牌"
+        ],
+        "unmet_requirements": [],
+        "reasons": [
+          "品牌限制:示例牌",
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "brand violated",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [
+            "别的牌子"
+          ],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": -47.0,
+        "hard_requirements_met": false,
+        "matched_requirements": [],
+        "unmet_requirements": [
+          "品牌限制:别的牌子"
+        ],
+        "reasons": [
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "after-sale matched",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [
+            "支持上门安装"
+          ],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": [
+            "上门安装"
+          ]
+        }
+      },
+      "expected": {
+        "score": 23.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [
+          "售后要求:上门安装"
+        ],
+        "unmet_requirements": [],
+        "reasons": [
+          "售后要求:上门安装",
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "after-sale unmet",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": [
+            "上门安装"
+          ]
+        }
+      },
+      "expected": {
+        "score": -47.0,
+        "hard_requirements_met": false,
+        "matched_requirements": [],
+        "unmet_requirements": [
+          "售后要求:上门安装"
+        ],
+        "reasons": [
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "store bonus for 自营",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌京东自营旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 13.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [],
+        "unmet_requirements": [],
+        "reasons": [
+          "页面价格 4599.00",
+          "店铺 示例牌京东自营旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "no store bonus",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "某某数码专营店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 5.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [],
+        "unmet_requirements": [],
+        "reasons": [
+          "页面价格 4599.00",
+          "店铺 某某数码专营店"
+        ]
+      }
+    },
+    {
+      "name": "zero estimated_payable falls back to visible_price",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "屏幕尺寸": "65英寸"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "3299",
+          "coupon": null,
+          "estimated_payable": "0",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": "5000",
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {},
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 22.1,
+        "hard_requirements_met": true,
+        "matched_requirements": [],
+        "unmet_requirements": [],
+        "reasons": [
+          "页面价格 3299",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    },
+    {
+      "name": "spec insertion order reaches search_text",
+      "input": {
+        "offer": {
+          "platform": "jd",
+          "title": "示例牌 DB-65A 65英寸 电视",
+          "url": "https://item.jd.com/100000000001.html",
+          "store_name": "示例牌官方旗舰店",
+          "brand": null,
+          "model": null,
+          "specs": {
+            "2": "第二",
+            "1": "第一",
+            "面板": "Mini LED"
+          },
+          "sku": null,
+          "listed_price": null,
+          "visible_price": "4599.00",
+          "coupon": null,
+          "estimated_payable": "4599.00",
+          "conditions": [],
+          "stock": null,
+          "parameters": {},
+          "llm_summary": null,
+          "verified_at": "2026-03-04T05:06:07.890123Z",
+          "confidence": "high"
+        },
+        "requirements": {
+          "category": "电视",
+          "raw_request": "",
+          "version": 1,
+          "budget_min": null,
+          "budget_max": null,
+          "use_cases": [],
+          "must_have": {},
+          "preferences": {
+            "panel": "Mini LED"
+          },
+          "exclusions": [],
+          "brands": [],
+          "after_sales": []
+        }
+      },
+      "expected": {
+        "score": 21.0,
+        "hard_requirements_met": true,
+        "matched_requirements": [
+          "panel=Mini LED"
+        ],
+        "unmet_requirements": [],
+        "reasons": [
+          "panel=Mini LED",
+          "页面价格 4599.00",
+          "店铺 示例牌官方旗舰店"
+        ]
+      }
+    }
+  ]
+}

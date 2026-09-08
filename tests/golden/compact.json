@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "compact"
+  },
+  "cases": [
+    {
+      "name": "65英寸",
+      "input": {
+        "value": "65英寸"
+      },
+      "expected": "65英寸"
+    },
+    {
+      "name": "６５英寸　１４４Ｈｚ",
+      "input": {
+        "value": "６５英寸　１４４Ｈｚ"
+      },
+      "expected": "65英寸144hz"
+    },
+    {
+      "name": " Mini-LED / 单机 ",
+      "input": {
+        "value": " Mini-LED / 单机 "
+      },
+      "expected": "miniled单机"
+    },
+    {
+      "name": "A_B-C/D",
+      "input": {
+        "value": "A_B-C/D"
+      },
+      "expected": "abcd"
+    },
+    {
+      "name": "ＭＩＮＩ ＬＥＤ",
+      "input": {
+        "value": "ＭＩＮＩ ＬＥＤ"
+      },
+      "expected": "miniled"
+    },
+    {
+      "name": "(empty)",
+      "input": {
+        "value": ""
+      },
+      "expected": ""
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "current_session_id": "3b3a5143bb08",
+  "llm": {
+    "enabled": false,
+    "provider_name": "openai-compatible",
+    "base_url": "",
+    "model": "",
+    "api_key": ""
+  }
+}

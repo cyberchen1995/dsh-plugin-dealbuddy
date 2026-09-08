@@ -1,0 +1,76 @@
+{
+  "session_id": "1c8b7dd801db",
+  "requirements": {
+    "category": "电饭煲",
+    "raw_request": "预算 800 元以内，4 升，家用，要有预约功能",
+    "version": 1,
+    "budget_min": null,
+    "budget_max": "800",
+    "use_cases": [],
+    "must_have": {},
+    "preferences": {},
+    "exclusions": [],
+    "brands": [],
+    "after_sales": []
+  },
+  "phase": "created",
+  "parameter_catalog": null,
+  "search_plan": null,
+  "candidates": [],
+  "verified_offers": [
+    {
+      "platform": "tmall",
+      "title": "样板 R4 4升 电饭煲（自拟样例）",
+      "url": "https://detail.tmall.com/item.htm?id=900000000012",
+      "store_name": "样板厨电旗舰店",
+      "brand": null,
+      "model": null,
+      "specs": {
+        "容量": "4L"
+      },
+      "sku": "4L / 黑色",
+      "listed_price": null,
+      "visible_price": "899.00",
+      "coupon": null,
+      "estimated_payable": "899.00",
+      "conditions": [],
+      "stock": null,
+      "parameters": {
+        "ocr_text": "自拟 OCR：涂层内胆"
+      },
+      "llm_summary": null,
+      "verified_at": "2026-09-08T05:03:26.988180Z",
+      "confidence": "low"
+    },
+    {
+      "platform": "jd",
+      "title": "示例牌 FB-40 4升 IH 电饭煲 预约（自拟样例）",
+      "url": "https://item.jd.com/100000000011.html",
+      "store_name": "示例牌京东自营旗舰店",
+      "brand": null,
+      "model": null,
+      "specs": {
+        "容量": "4L",
+        "加热方式": "IH"
+      },
+      "sku": "4L / 米白",
+      "listed_price": null,
+      "visible_price": "699",
+      "coupon": null,
+      "estimated_payable": "699",
+      "conditions": [],
+      "stock": null,
+      "parameters": {
+        "ocr_text": "自拟 OCR：24 小时预约"
+      },
+      "llm_summary": null,
+      "verified_at": "2026-09-08T05:03:26.989654Z",
+      "confidence": "high"
+    }
+  ],
+  "report_markdown": "# DealBuddy 选品报告：电饭煲\n\n需求版本：v1\n\n> 价格来自页面可见信息。估算应付只计算页面明确展示且可直接解析的优惠，不代表结算价格。\n\n## 最符合需求\n- 商品：[示例牌 FB-40 4升 IH 电饭煲 预约（自拟样例）](https://item.jd.com/100000000011.html)\n- 平台：jd\n- 店铺：示例牌京东自营旗舰店\n- 匹配分：18.89\n- SKU：4L / 米白\n- 页面展示价：¥699\n- 估算应付：¥699\n- 复核时间：2026-09-08T05:03:26.989654+00:00\n- 数据可信度：high\n\n## 最低预算\n- 商品：[示例牌 FB-40 4升 IH 电饭煲 预约（自拟样例）](https://item.jd.com/100000000011.html)\n- 平台：jd\n- 店铺：示例牌京东自营旗舰店\n- 匹配分：18.89\n- SKU：4L / 米白\n- 页面展示价：¥699\n- 估算应付：¥699\n- 复核时间：2026-09-08T05:03:26.989654+00:00\n- 数据可信度：high\n\n## 综合性价比\n- 商品：[示例牌 FB-40 4升 IH 电饭煲 预约（自拟样例）](https://item.jd.com/100000000011.html)\n- 平台：jd\n- 店铺：示例牌京东自营旗舰店\n- 匹配分：18.89\n- SKU：4L / 米白\n- 页面展示价：¥699\n- 估算应付：¥699\n- 复核时间：2026-09-08T05:03:26.989654+00:00\n- 数据可信度：high\n\n## 值得加预算\n- 商品：[样板 R4 4升 电饭煲（自拟样例）](https://detail.tmall.com/item.htm?id=900000000012)\n- 平台：tmall\n- 店铺：样板厨电旗舰店\n- 匹配分：-4.38\n- SKU：4L / 黑色\n- 页面展示价：¥899.00\n- 估算应付：¥899.00\n- 复核时间：2026-09-08T05:03:26.988180+00:00\n- 数据可信度：low\n\n## 不推荐项\n暂无明确不推荐项。\n",
+  "messages": [],
+  "pending_action": null,
+  "created_at": "2026-09-08T05:03:26.985447Z",
+  "updated_at": "2026-09-08T05:03:26.989712Z"
+}

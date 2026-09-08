@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "source": "DealBuddy scripts/export_golden.py",
+    "dealbuddy_version": "0.10.0",
+    "dealbuddy_commit": "27531a0",
+    "fixed_verified_at": "2026-03-04T05:06:07.890123Z",
+    "note": "Inputs are invented. No real capture or user session appears here.",
+    "function": "price_score"
+  },
+  "cases": [
+    {
+      "name": "no price",
+      "input": {
+        "price": null,
+        "budget_max": "5000"
+      },
+      "expected": 0
+    },
+    {
+      "name": "no budget",
+      "input": {
+        "price": "4599.00",
+        "budget_max": null
+      },
+      "expected": 5.0
+    },
+    {
+      "name": "well under budget",
+      "input": {
+        "price": "2000",
+        "budget_max": "5000"
+      },
+      "expected": 15.0
+    },
+    {
+      "name": "at the 0.6 utilisation knee",
+      "input": {
+        "price": "3000",
+        "budget_max": "5000"
+      },
+      "expected": 15.0
+    },
+    {
+      "name": "just under budget",
+      "input": {
+        "price": "4599.99",
+        "budget_max": "5000"
+      },
+      "expected": 10.20003
+    },
+    {
+      "name": "exact half-even tie: -0.875",
+      "input": {
+        "price": "80700",
+        "budget_max": "80000"
+      },
+      "expected": -0.8750000000000001
+    },
+    {
+      "name": "cent-valued excess",
+      "input": {
+        "price": "4599.99",
+        "budget_max": "4000"
+      },
+      "expected": -14.99975
+    },
+    {
+      "name": "clamped at -30",
+      "input": {
+        "price": "20000",
+        "budget_max": "5000"
+      },
+      "expected": -30.0
+    }
+  ]
+}
