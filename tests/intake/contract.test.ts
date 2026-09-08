@@ -123,7 +123,7 @@ async function seedCurrentSession(sessionId = 'aaaaaaaaaaaa'): Promise<void> {
   )
   await writeFile(
     join(dataDir, 'config.json'),
-    JSON.stringify({ current_session_id: sessionId, llm: { enabled: false, api_key: 'secret' } }, null, 2),
+    JSON.stringify({ current_session_id: sessionId, llm: { enabled: false, api_key: 'placeholder-not-a-real-key' } }, null, 2),
     'utf8',
   )
 }

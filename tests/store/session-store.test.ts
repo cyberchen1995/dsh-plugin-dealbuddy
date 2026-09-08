@@ -108,7 +108,7 @@ describe('SessionStore', () => {
 
   it('reads current_session_id and treats an empty value as unset', async () => {
     const set = await makeDataDir({
-      'config.json': JSON.stringify({ current_session_id: 'aaaaaaaaaaaa', llm: { api_key: 'x' } }),
+      'config.json': JSON.stringify({ current_session_id: 'aaaaaaaaaaaa', llm: { api_key: 'placeholder-not-a-real-key' } }),
     })
     await expect(new SessionStore(set).currentSessionId()).resolves.toBe('aaaaaaaaaaaa')
 
