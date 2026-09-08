@@ -1,0 +1,5 @@
+# Bundle patch layer for dsh-plugin-dealbuddy.
+# Inserts the plugin row; users override its config in their own profile patch.
+- insert:
+    - id: dealbuddy
+      name: dsh-plugin-dealbuddy

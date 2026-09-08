@@ -1,0 +1,7 @@
+packages:
+  - .
+
+# esbuild is vitest's native dependency; approving its build keeps `pnpm install`
+# from failing pnpm's ignored-builds gate. No runtime dependency needs a build script.
+allowBuilds:
+  esbuild: true
