@@ -5,9 +5,13 @@ DealBuddy 购物研究能力的 [DeepSeek Harness](https://github.com/deepseek-a
 商品事实仍由用户在浏览器里手动采集，插件负责读写本机 `~/.dealbuddy` 的会话与报告，
 并把这些操作作为工具交给 dsh 会话里的模型。插件不持有任何模型密钥，不调用购物平台 API。
 
-**状态：R1 骨架。** 目前只有只读能力，入库监听与其余工具在后续轮次落地。
+**状态：入库可用。** 采集扩展可以直接把商品投给插件；其余工具在后续轮次落地。
 
 ## 当前能力
+
+浏览器扩展把商品投到 `http://127.0.0.1:<port>/api/current/offers`，插件写入
+`~/.dealbuddy` 的当前会话并重算报告。文件格式与 Python 工作台完全一致，
+两侧写出的会话可以互相读取。
 
 | 工具 | 作用 |
 |---|---|
@@ -33,7 +37,7 @@ dsh plugin --profile web remove dsh-plugin-dealbuddy
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `port` | `8765` | 入库监听端口（R3 启用）。与 Python 工作台共存时改成别的端口，并同步修改扩展弹窗里的投递地址 |
+| `port` | `8765` | 入库监听端口。与 Python 工作台共存时改成别的端口，并同步修改扩展弹窗里的投递地址 |
 | `dataDir` | `$DEALBUDDY_HOME` 或 `~/.dealbuddy` | 数据目录，支持 `~/` 开头 |
 | `extraAllowedDomains` | `[]` | 入库 CORS 白名单追加的主机后缀 |
 | `ocrTextPreviewChars` | `400` | 展示会话时保留的 OCR 文本长度 |
