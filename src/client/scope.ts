@@ -90,7 +90,7 @@ export interface ClientContextLike {
    */
   on(event: string, listener: () => void): () => void
   /**
-   * @param dispose - run when the plugin's fiber unloads.
+   * @param body - run now; its returned disposer runs when the fiber unloads.
    */
-  effect(dispose: () => () => void): void
+  effect(body: () => () => void): void
 }
