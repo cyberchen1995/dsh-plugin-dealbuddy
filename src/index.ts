@@ -32,7 +32,7 @@ export function apply(ctx: Context, config: Config): void {
   const store = new SessionStore(dataDir)
   const logger = ctx.logger('dealbuddy')
 
-  registerTools(ctx, store, config.ocrTextPreviewChars)
+  registerTools(ctx, store, config.ocrTextPreviewChars, config.port)
 
   ctx.effect(() => {
     const starting = startIntakeServer(store, {

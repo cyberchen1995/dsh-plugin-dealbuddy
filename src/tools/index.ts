@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 
 import type { SessionStore } from '../store/session-store.js'
+import { doctorTool } from './doctor.js'
 import { listSessionsTool } from './list-sessions.js'
 import { addOfferTool, getReportTool, refineRequirementsTool, removeOfferTool } from './offers.js'
 import { createSessionTool, setCurrentSessionTool, showSessionTool } from './sessions.js'
@@ -13,11 +14,13 @@ import { createSessionTool, setCurrentSessionTool, showSessionTool } from './ses
  * @param ctx - a context whose `tools` service is ready.
  * @param store - the session store.
  * @param ocrPreviewChars - how much recognised text a session view keeps.
+ * @param port - the configured intake port, reported by the self-check.
  */
 export function registerTools(
   ctx: Context,
   store: SessionStore,
   ocrPreviewChars: number,
+  port: number,
 ): void {
   for (const tool of [
     listSessionsTool(store),
@@ -28,6 +31,7 @@ export function registerTools(
     removeOfferTool(store),
     refineRequirementsTool(store),
     getReportTool(store),
+    doctorTool(store, port),
   ]) {
     ctx.tools.register(tool)
   }
