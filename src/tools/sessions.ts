@@ -1,12 +1,11 @@
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 
-import { initialRequirements } from '../core/requirements.js'
-import { newSession } from '../core/session.js'
-import { writeRequirements } from '../core/refine.js'
-import { nowIso } from '../core/clock.js'
-import { parseJson, stringifyJson, type JsonObject } from '../store/json.js'
-import { SessionStore } from '../store/session-store.js'
-import { dropMessages, toPlain, truncateOcrText } from './shared.js'
+import {
+  createSession,
+  setCurrentSession,
+  showSession,
+} from '../services/sessions.js'
+import type { SessionStore } from '../store/session-store.js'
 
 /**
  * Session lifecycle tools: create, show, and point captures at a session.
@@ -38,16 +37,7 @@ export function createSessionTool(store: SessionStore): ToolDefinition {
       render: (_args, value) => [{ type: 'text', text: renderCreated(value) }],
     },
     async execute(args) {
-      const sessionId = SessionStore.newSessionId()
-      const requirements = initialRequirements(args.category, args.request ?? '')
-      const now = nowIso()
-      const session = newSession(sessionId, writeRequirements(requirements), now)
-      await store.create(sessionId, session)
-      await store.setCurrentSessionId(sessionId)
-      return {
-        session: toPlain(session),
-        current_session_id: sessionId,
-      }
+      return createSession(store, args.category, args.request ?? '')
     },
   })
 }
@@ -81,20 +71,17 @@ export function showSessionTool(
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: renderSession(value) }],
     },
+    presentResult: (args, result) =>
+      result.isError
+        ? undefined
+        : { card: 'generic', title: `DealBuddy 会话 ${sessionIdOf(args)}` },
     isConcurrencySafe: () => true,
     async execute(args) {
-      const session = await store.load(args.session_id)
-      if (session === undefined) throw new Error(`Unknown session: ${args.session_id}`)
-      // Work on a copy so the view's truncation never reaches the file.
-      const view = parseJson(stringifyJson(session)) as JsonObject
-      const includeOcr = args.include_ocr_text === true
-      const truncated = truncateOcrText(view, ocrPreviewChars(), includeOcr)
-      const droppedMessages = args.include_messages === true ? 0 : dropMessages(view)
-      return {
-        session: toPlain(view),
-        ocr_text_shortened_offers: truncated,
-        omitted_messages: droppedMessages,
-      }
+      return showSession(store, args.session_id, {
+        includeOcrText: args.include_ocr_text === true,
+        includeMessages: args.include_messages === true,
+        ocrPreviewChars: ocrPreviewChars(),
+      })
     },
   })
 }
@@ -125,10 +112,7 @@ export function setCurrentSessionTool(store: SessionStore): ToolDefinition {
       ],
     },
     async execute(args) {
-      const session = await store.load(args.session_id)
-      if (session === undefined) throw new Error(`Unknown session: ${args.session_id}`)
-      await store.setCurrentSessionId(args.session_id)
-      return { current_session_id: args.session_id }
+      return setCurrentSession(store, args.session_id)
     },
   })
 }
@@ -198,4 +182,15 @@ function renderSession(value: unknown): string {
     '「估算应付」is an estimate from what the page showed. It is not a settlement price.',
   )
   return lines.join('\n')
+}
+
+/**
+ * Read the session id out of a call's arguments for a card title.
+ * @param args - the call arguments as recorded.
+ * @returns the id, or a placeholder when it is not a string.
+ */
+export function sessionIdOf(args: unknown): string {
+  const record = args as { session_id?: unknown } | null
+  const id = record?.session_id
+  return typeof id === 'string' ? id : '(未知)'
 }
