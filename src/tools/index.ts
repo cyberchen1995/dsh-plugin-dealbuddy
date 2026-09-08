@@ -1,0 +1,34 @@
+import type { Context } from '@deepseek-ai/cordis'
+
+import type { SessionStore } from '../store/session-store.js'
+import { listSessionsTool } from './list-sessions.js'
+import { addOfferTool, getReportTool, refineRequirementsTool, removeOfferTool } from './offers.js'
+import { createSessionTool, setCurrentSessionTool, showSessionTool } from './sessions.js'
+
+/**
+ * Register every DealBuddy tool.
+ *
+ * `ask_session` from the Python MCP surface has no counterpart: follow-up
+ * questions are the conversation the tools already live in.
+ * @param ctx - a context whose `tools` service is ready.
+ * @param store - the session store.
+ * @param ocrPreviewChars - how much recognised text a session view keeps.
+ */
+export function registerTools(
+  ctx: Context,
+  store: SessionStore,
+  ocrPreviewChars: number,
+): void {
+  for (const tool of [
+    listSessionsTool(store),
+    createSessionTool(store),
+    showSessionTool(store, ocrPreviewChars),
+    setCurrentSessionTool(store),
+    addOfferTool(store),
+    removeOfferTool(store),
+    refineRequirementsTool(store),
+    getReportTool(store),
+  ]) {
+    ctx.tools.register(tool)
+  }
+}

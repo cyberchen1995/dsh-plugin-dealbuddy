@@ -5,7 +5,7 @@ import { startIntakeServer } from './intake/server.js'
 import { registerSkill } from './skill.js'
 import { resolveDataDir } from './store/paths.js'
 import { SessionStore } from './store/session-store.js'
-import { listSessionsTool } from './tools/list-sessions.js'
+import { registerTools } from './tools/index.js'
 
 export const name = 'dealbuddy'
 
@@ -32,7 +32,7 @@ export function apply(ctx: Context, config: Config): void {
   const store = new SessionStore(dataDir)
   const logger = ctx.logger('dealbuddy')
 
-  ctx.tools.register(listSessionsTool(store))
+  registerTools(ctx, store, config.ocrTextPreviewChars)
 
   ctx.effect(() => {
     const starting = startIntakeServer(store, {
