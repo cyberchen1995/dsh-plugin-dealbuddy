@@ -149,7 +149,7 @@ describe('dealbuddy_show_session', () => {
     const sessionId = created['current_session_id'] as string
     await run(addOfferTool(store), offerArgs(sessionId))
 
-    const shown = await run(showSessionTool(store, 400), { session_id: sessionId })
+    const shown = await run(showSessionTool(store, () => 400), { session_id: sessionId })
     expect(shown['ocr_text_shortened_offers']).toBe(1)
     const session = shown['session'] as Record<string, unknown>
     const offers = session['verified_offers'] as Record<string, unknown>[]
@@ -167,7 +167,7 @@ describe('dealbuddy_show_session', () => {
     const created = await run(createSessionTool(store), { category: '电视', request: '' })
     const sessionId = created['current_session_id'] as string
     await run(addOfferTool(store), offerArgs(sessionId))
-    const shown = await run(showSessionTool(store, 400), {
+    const shown = await run(showSessionTool(store, () => 400), {
       session_id: sessionId,
       include_ocr_text: true,
     })

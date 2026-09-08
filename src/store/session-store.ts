@@ -16,10 +16,33 @@ const CONFIG_LOCK_KEY = '\u0000config'
 export class SessionStore {
   private readonly mutex = new KeyedMutex()
 
+  /** The resolved data directory; a settings change may move it. */
+  #dataDir: string
+
   /**
    * @param dataDir - the resolved absolute data directory.
    */
-  constructor(readonly dataDir: string) {}
+  constructor(dataDir: string) {
+    this.#dataDir = dataDir
+  }
+
+  /**
+   * @returns the directory sessions are currently read from and written to.
+   */
+  get dataDir(): string {
+    return this.#dataDir
+  }
+
+  /**
+   * Point the store at another directory.
+   *
+   * The instance is kept rather than replaced so registered tools, which hold
+   * this object, follow a settings change without re-registering.
+   * @param dataDir - the new resolved absolute data directory.
+   */
+  useDataDir(dataDir: string): void {
+    this.#dataDir = dataDir
+  }
 
   /**
    * Generate a session id in the Python store's shape (`session.py:31`).

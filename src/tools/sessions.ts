@@ -55,12 +55,12 @@ export function createSessionTool(store: SessionStore): ToolDefinition {
 /**
  * Build `dealbuddy_show_session`.
  * @param store - the session store.
- * @param ocrPreviewChars - default OCR preview length.
+ * @param ocrPreviewChars - reads the default OCR preview length.
  * @returns the tool definition.
  */
 export function showSessionTool(
   store: SessionStore,
-  ocrPreviewChars: number,
+  ocrPreviewChars: () => number,
 ): ToolDefinition {
   return defineTool({
     name: 'dealbuddy_show_session',
@@ -88,7 +88,7 @@ export function showSessionTool(
       // Work on a copy so the view's truncation never reaches the file.
       const view = parseJson(stringifyJson(session)) as JsonObject
       const includeOcr = args.include_ocr_text === true
-      const truncated = truncateOcrText(view, ocrPreviewChars, includeOcr)
+      const truncated = truncateOcrText(view, ocrPreviewChars(), includeOcr)
       const droppedMessages = args.include_messages === true ? 0 : dropMessages(view)
       return {
         session: toPlain(view),

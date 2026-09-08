@@ -13,14 +13,15 @@ import { createSessionTool, setCurrentSessionTool, showSessionTool } from './ses
  * questions are the conversation the tools already live in.
  * @param ctx - a context whose `tools` service is ready.
  * @param store - the session store.
- * @param ocrPreviewChars - how much recognised text a session view keeps.
- * @param port - the configured intake port, reported by the self-check.
+ * @param store - the session store; it follows a data-directory change in place.
+ * @param ocrPreviewChars - reads how much recognised text a session view keeps.
+ * @param port - reads the configured intake port, reported by the self-check.
  */
 export function registerTools(
   ctx: Context,
   store: SessionStore,
-  ocrPreviewChars: number,
-  port: number,
+  ocrPreviewChars: () => number,
+  port: () => number,
 ): void {
   for (const tool of [
     listSessionsTool(store),

@@ -24,10 +24,10 @@ interface Check {
 /**
  * Build `dealbuddy_doctor`.
  * @param store - the session store.
- * @param port - the configured intake port.
+ * @param port - reads the configured intake port.
  * @returns the tool definition.
  */
-export function doctorTool(store: SessionStore, port: number): ToolDefinition {
+export function doctorTool(store: SessionStore, port: () => number): ToolDefinition {
   return defineTool({
     name: 'dealbuddy_doctor',
     description:
@@ -40,11 +40,12 @@ export function doctorTool(store: SessionStore, port: number): ToolDefinition {
 
       checks.push(await checkDataDir(store.dataDir))
       checks.push(await checkSessions(store))
-      checks.push(await checkListener(port, exec.signal))
+      const currentPort = port()
+      checks.push(await checkListener(currentPort, exec.signal))
 
       return {
         data_dir: store.dataDir,
-        intake_url: `http://127.0.0.1:${port}/api/current/offers`,
+        intake_url: `http://127.0.0.1:${currentPort}/api/current/offers`,
         checks: checks.map((check) => ({ ...check })),
         all_ok: checks.every((check) => check.ok),
       }

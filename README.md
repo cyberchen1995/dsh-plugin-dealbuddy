@@ -42,7 +42,13 @@ dsh plugin --profile web remove dsh-plugin-dealbuddy
 
 ## 配置
 
-在 profile 的 `cordis.patch.yml` 里覆盖 `dealbuddy` 行的 config：
+装好后在 dsh 的**设置 → 插件 → 插件配置**里有一张 DealBuddy 卡片，可以直接改端口、
+数据目录与投递白名单。改动写进 dsh 的用户设置层，保存后立即生效：端口变了监听器会
+重新绑定，数据目录变了会话读写随之切换。每个被改过的字段旁边有「恢复默认」，
+清掉用户层的值、回到部署组合层。
+
+也可以在 profile 的 `cordis.patch.yml` 里写 `dealbuddy` 行的 config，它是设置卡片
+之下的组合层：
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
@@ -62,6 +68,11 @@ pnpm run typecheck
 pnpm run test
 pnpm run build
 ```
+
+`build` 产出两半：`tsc` 编出宿主侧的 `lib/`，`scripts/build-client.mjs` 用 esbuild
+把浏览器侧打成 `lib/client.js`，并套上 dsh 模块加载器要的
+`window.__ModuleLoader__.load({ id, factory })` 外壳。React 与 `@deepseek-ai/*`
+是运行时外部依赖，由浏览器模块表提供，不打进包里。
 
 依赖锁在 `0.1.2-rc.1` 线。npm 上 `@deepseek-ai/dsh-*` 的 `latest` 标签指向已退役的 `0.0.1-rc.1`，不要放宽。
 

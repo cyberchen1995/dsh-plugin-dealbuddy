@@ -50,7 +50,7 @@ afterEach(async () => {
 
 describe('dealbuddy_doctor', () => {
   it('names the missing piece when nothing is set up yet', async () => {
-    const result = await run(doctorTool(store, 59999), {})
+    const result = await run(doctorTool(store, () => 59999), {})
     expect(result['all_ok']).toBe(false)
     expect(check(result, 'data directory').ok).toBe(true)
     expect(check(result, 'capture target').detail).toContain('no sessions yet')
@@ -66,7 +66,7 @@ describe('dealbuddy_doctor', () => {
     })
     closers.push(started.close)
 
-    const result = await run(doctorTool(store, started.port), {})
+    const result = await run(doctorTool(store, () => started.port), {})
     expect(result['all_ok']).toBe(true)
     expect(check(result, 'capture listener').detail).toContain('answers preflight correctly')
     expect(result['intake_url']).toBe(`http://127.0.0.1:${started.port}/api/current/offers`)
@@ -75,7 +75,7 @@ describe('dealbuddy_doctor', () => {
   it('reports a dangling current-session pointer', async () => {
     await run(createSessionTool(store), { category: '电视', request: '' })
     await store.setCurrentSessionId('ffffffffffff')
-    const result = await run(doctorTool(store, 59999), {})
+    const result = await run(doctorTool(store, () => 59999), {})
     expect(check(result, 'capture target').ok).toBe(false)
     expect(check(result, 'capture target').detail).toContain('has no file')
   })
