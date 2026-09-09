@@ -290,25 +290,44 @@ body[data-ds-dark-theme] [data-dealbuddy-workbench] {
 /**
  * Add the stylesheet to the document, and take it away again on unload.
  *
- * A plugin's client bundle can be evaluated more than once across a reload, so
- * the tag carries an id and a second call adopts the existing node rather than
- * adding a second one.
- * @returns the disposer removing the stylesheet this call added.
+ * Two client instances overlap for a moment during a plugin reload, and the
+ * second one adopts the first one's tag rather than adding a duplicate. So the
+ * tag is only removed once nobody is left using it — and the count lives on the
+ * node itself, because each bundle copy has its own module state and the DOM is
+ * the only thing the two of them share.
+ * @returns the disposer releasing this call's claim on the stylesheet.
  */
 export function ensureWorkbenchStyles(): () => void {
   if (typeof document === 'undefined') return () => undefined
   const selector = `style[data-plugin-css=${JSON.stringify(TAG_ID)}]`
-  const existing = document.querySelector(selector)
-  if (existing !== null) {
-    return () => {
-      existing.remove()
-    }
+  let tag = document.querySelector<HTMLStyleElement>(selector)
+  if (tag === null) {
+    tag = document.createElement('style')
+    tag.dataset['pluginCss'] = TAG_ID
+    tag.textContent = CSS
+    document.head.append(tag)
   }
-  const tag = document.createElement('style')
-  tag.dataset['pluginCss'] = TAG_ID
-  tag.textContent = CSS
-  document.head.append(tag)
+  const owned = tag
+  owned.dataset['pluginCssUsers'] = String(readUsers(owned) + 1)
+  let released = false
   return () => {
-    tag.remove()
+    if (released) return
+    released = true
+    const left = readUsers(owned) - 1
+    if (left > 0) {
+      owned.dataset['pluginCssUsers'] = String(left)
+      return
+    }
+    owned.remove()
   }
+}
+
+/**
+ * Read how many live instances claim the stylesheet.
+ * @param tag - the style element.
+ * @returns the recorded count, or 0 when it carries none.
+ */
+function readUsers(tag: HTMLStyleElement): number {
+  const recorded = Number(tag.dataset['pluginCssUsers'])
+  return Number.isFinite(recorded) && recorded > 0 ? recorded : 0
 }

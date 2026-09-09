@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ClientContextLike, RpcResultLike } from '../../src/client/scope.js'
-import { WorkbenchStore, syncKey } from '../../src/client/workbench/store.js'
+import { SYNC_INTERVAL_MS, WorkbenchStore, syncKey } from '../../src/client/workbench/store.js'
 import { offersOf } from '../../src/client/workbench/types.js'
 
 /**
@@ -284,5 +284,51 @@ describe('workbench store', () => {
 
     // Nothing may re-arm the four-second poll after the fiber unloaded.
     expect(context.calls).toHaveLength(calls)
+  })
+
+  it('polls while the tab is in front and stops when it goes behind', async () => {
+    // The store reads `document.visibilityState`; the node environment has no
+    // document at all, so the test supplies just that much of one.
+    const fake = { visibilityState: 'visible' }
+    const globals = globalThis as { document?: unknown }
+    const had = 'document' in globals
+    globals.document = fake
+    vi.useFakeTimers()
+    try {
+      const context = new FakeContext()
+      answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+      const polling = new WorkbenchStore(context.asContext())
+      polling.toggle()
+      await vi.advanceTimersByTimeAsync(0)
+      const opened = context.calls.length
+
+      await vi.advanceTimersByTimeAsync(SYNC_INTERVAL_MS + 100)
+      const whileVisible = context.calls.length
+      expect(whileVisible).toBeGreaterThan(opened)
+
+      // Going to the background has to stop the interval that is already armed.
+      fake.visibilityState = 'hidden'
+      polling.syncVisibility()
+      await vi.advanceTimersByTimeAsync(SYNC_INTERVAL_MS * 3)
+
+      expect(context.calls).toHaveLength(whileVisible)
+
+      // Coming back to the front re-reads at once and re-arms the interval,
+      // which is what proves the timer was really taken down rather than just
+      // skipping its ticks.
+      fake.visibilityState = 'visible'
+      polling.syncVisibility()
+      await vi.advanceTimersByTimeAsync(0)
+      const onReturn = context.calls.length
+      expect(onReturn).toBeGreaterThan(whileVisible)
+
+      await vi.advanceTimersByTimeAsync(SYNC_INTERVAL_MS + 100)
+      expect(context.calls.length).toBeGreaterThan(onReturn)
+      polling.dispose()
+    } finally {
+      vi.useRealTimers()
+      if (had) globals.document = fake
+      else delete globals.document
+    }
   })
 })

@@ -16,6 +16,14 @@ import { offersOf, type SessionSummaryView, type SessionView, type WorkbenchStat
 /** How often an open, visible panel re-reads the current session. */
 export const SYNC_INTERVAL_MS = 4000
 
+/**
+ * Whether the page is in front of someone.
+ * @returns true when there is no document at all (tests) or the tab is visible.
+ */
+function isPageVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState === 'visible'
+}
+
 /** A product awaiting delete confirmation. */
 export interface PendingDelete {
   url: string
@@ -140,10 +148,26 @@ export class WorkbenchStore {
     this.#listeners.clear()
   }
 
-  /** Re-read after a reconnect or a tab becoming visible again. */
+  /** Re-read after a reconnect. */
   resume(): void {
     if (this.#disposed || !this.#state.open) return
     this.#retimer()
+    void this.refresh({ silent: true })
+    void this.refreshStatus()
+  }
+
+  /**
+   * Follow the tab's visibility, in both directions.
+   *
+   * The arming check reads `document.visibilityState`, so something has to call
+   * it when that changes — including on the way to hidden, or an already-armed
+   * interval keeps pulling the whole current session for a tab nobody is
+   * looking at.
+   */
+  syncVisibility(): void {
+    if (this.#disposed) return
+    this.#retimer()
+    if (!this.#state.open || !isPageVisible()) return
     void this.refresh({ silent: true })
     void this.refreshStatus()
   }
@@ -343,9 +367,12 @@ export class WorkbenchStore {
       !this.#disposed &&
       this.#state.open &&
       this.#state.pendingDelete === null &&
-      (typeof document === 'undefined' || document.visibilityState === 'visible')
+      isPageVisible()
     if (wanted && this.#timer === undefined) {
       this.#timer = setInterval(() => {
+        // Checked again per tick, as the Python workbench does: a missed
+        // visibility transition then costs nothing instead of polling forever.
+        if (this.#disposed || !isPageVisible()) return
         void this.refresh({ silent: true })
       }, SYNC_INTERVAL_MS)
       return

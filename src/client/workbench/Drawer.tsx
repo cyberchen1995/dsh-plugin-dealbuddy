@@ -30,11 +30,12 @@ export function WorkbenchDrawer(props: { store: WorkbenchStore }): JSX.Element |
     if (open) rootRef.current?.focus()
   }, [open])
 
-  // The tab coming back to the front re-reads immediately rather than waiting
-  // out the poll interval.
+  // Both directions matter: coming back to the front re-reads immediately
+  // instead of waiting out the interval, and going to the back has to stop the
+  // interval that is already armed.
   useEffect(() => {
     const onVisibility = (): void => {
-      if (document.visibilityState === 'visible') store.resume()
+      store.syncVisibility()
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
