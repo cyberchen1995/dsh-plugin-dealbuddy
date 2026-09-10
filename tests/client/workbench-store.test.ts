@@ -60,22 +60,41 @@ function session(updatedAt: string, urls: string[]): Record<string, unknown> {
   }
 }
 
+const CONVERSATION = 'conv-1'
+
+/**
+ * Build a store that already knows which conversation is on screen.
+ * @param context - the stubbed browser context.
+ * @returns the store.
+ */
+function newStore(context: FakeContext): WorkbenchStore {
+  const built = new WorkbenchStore(context.asContext())
+  built.setConversation({ id: CONVERSATION, title: '对话' }, { [CONVERSATION]: '对话' })
+  return built
+}
+
 /**
  * Answer the two reads a refresh performs.
  * @param context - the stub.
- * @param current - the current session id, or null.
+ * @param current - the capture target, or null.
  * @param document - the session document to return.
+ * @param bound - which shopping session this conversation is bound to.
  */
 function answerWith(
   context: FakeContext,
   current: string | null,
   document: Record<string, unknown>,
+  bound: string | null = 'aaaaaaaaaaaa',
 ): void {
   context.answers['listSessions'] = () => ({
     ok: true,
     value: {
       current_session_id: current,
       data_dir: '/tmp/dealbuddy',
+      bindings:
+        bound === null
+          ? []
+          : [{ session_id: bound, dsh_session_id: CONVERSATION, bound_at: '2026-01-01T00:00:00Z' }],
       sessions: [
         { session_id: 'aaaaaaaaaaaa', category: '电视', raw_request: '', version: 1, phase: 'created', verified_count: 0, report_available: false, created_at: '1', updated_at: '1' },
         { session_id: 'bbbbbbbbbbbb', category: '手机', raw_request: '', version: 1, phase: 'created', verified_count: 0, report_available: false, created_at: '2', updated_at: '2' },
@@ -115,7 +134,7 @@ describe('workbench store', () => {
   it('shows the sessions newest first', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', []))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
 
     await store.refresh()
 
@@ -128,7 +147,7 @@ describe('workbench store', () => {
   it('announces newly captured products and stays quiet otherwise', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
 
     await store.refresh()
     // The first read is not a capture: there is nothing to compare it against.
@@ -147,7 +166,7 @@ describe('workbench store', () => {
   it('keeps a failed poll silent but reports a failed action', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refresh()
 
     context.answers['listSessions'] = () => ({
@@ -164,7 +183,7 @@ describe('workbench store', () => {
   it('deletes by URL inside the session that was current when asked', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a', 'b']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refresh()
 
     store.askDelete({ url: 'a', title: '商品 a' })
@@ -180,7 +199,8 @@ describe('workbench store', () => {
   it('names its arguments the way the Host declares its parameters', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', []))
-    store = new WorkbenchStore(context.asContext())
+    context.answers['createSession'] = () => ({ ok: true, value: { session_id: 'cccccccccccc' } })
+    store = newStore(context)
     store.setDraft('draftCategory', ' 电视 ')
     store.setDraft('draftRequest', '预算5000以内')
 
@@ -194,6 +214,11 @@ describe('workbench store', () => {
       method: 'createSession',
       args: { category: ' 电视 ', request: '预算5000以内' },
     })
+    // A session made from inside a conversation belongs to it straight away.
+    expect(context.calls[1]).toEqual({
+      method: 'bind',
+      args: { sessionId: 'cccccccccccc', dshSessionId: CONVERSATION },
+    })
     expect(store.getSnapshot().draftCategory).toBe('')
   })
 
@@ -204,7 +229,7 @@ describe('workbench store', () => {
       ok: false,
       error: { code: 'gateway/bad-request', message: 'category is required' },
     })
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     store.setDraft('draftCategory', '电视')
 
     await store.createSession()
@@ -216,7 +241,7 @@ describe('workbench store', () => {
   it('abandons a refresh that a newer one overtook', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a', 'b', 'c']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refresh()
 
     // A poll reads the three-offer document, then stalls on the wire.
@@ -242,7 +267,7 @@ describe('workbench store', () => {
   it('keeps an error on screen through a successful poll', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refresh()
 
     context.answers['setCurrentSession'] = () => ({
@@ -260,7 +285,7 @@ describe('workbench store', () => {
   it('does not re-render when a poll finds nothing new', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refresh()
 
     let notifications = 0
@@ -275,7 +300,7 @@ describe('workbench store', () => {
   it('stops answering once disposed', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     store.toggle()
     await store.refresh()
 
@@ -299,7 +324,7 @@ describe('workbench store', () => {
     try {
       const context = new FakeContext()
       answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-      const polling = new WorkbenchStore(context.asContext())
+      const polling = newStore(context)
       polling.toggle()
       await vi.advanceTimersByTimeAsync(0)
       const opened = context.calls.length
@@ -337,7 +362,7 @@ describe('workbench store', () => {
   it('deletes from the session the card came from, not whatever is current later', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['shared-url']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refresh()
 
     // The dialog opens against session A.
@@ -362,7 +387,7 @@ describe('workbench store', () => {
       ok: true,
       value: { data_dir: '/tmp/dealbuddy', intake_url: 'http://127.0.0.1:8766/api/current/offers', listening: true },
     })
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refreshStatus()
     expect(store.getSnapshot().status?.listening).toBe(true)
 
@@ -379,7 +404,7 @@ describe('workbench store', () => {
   it('drops the session on screen when the pointer moved but its file will not read', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     await store.refresh()
 
     answerWith(context, 'bbbbbbbbbbbb', session('t2', ['b']))
@@ -403,7 +428,7 @@ describe('workbench store', () => {
     try {
       const context = new FakeContext()
       answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
-      const slow = new WorkbenchStore(context.asContext())
+      const slow = newStore(context)
       slow.toggle()
       await vi.advanceTimersByTimeAsync(0)
 
@@ -434,7 +459,7 @@ describe('workbench store', () => {
     answerWith(context, 'aaaaaaaaaaaa', session('t1', []))
     const stalled = deferred()
     context.answers['createSession'] = () => stalled.promise
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
     store.setDraft('draftCategory', '电视')
     store.setDraft('draftRequest', '预算5000以内')
 
@@ -453,7 +478,7 @@ describe('workbench store', () => {
     const context = new FakeContext()
     const slow = deferred()
     context.answers['status'] = () => slow.promise
-    store = new WorkbenchStore(context.asContext())
+    store = newStore(context)
 
     const first = store.refreshStatus()
     context.answers['status'] = () => ({
@@ -478,5 +503,98 @@ describe('workbench store', () => {
     await first
 
     expect(store.getSnapshot().status?.intake_url).toBe('http://127.0.0.1:8899/api/current/offers')
+  })
+
+  it('shows the session this conversation is bound to, not the capture target', async () => {
+    const context = new FakeContext()
+    // Captures land in B while this conversation is about A.
+    answerWith(context, 'bbbbbbbbbbbb', session('t1', ['a']), 'aaaaaaaaaaaa')
+    store = newStore(context)
+
+    await store.refresh()
+
+    expect(store.getSnapshot().boundSessionId).toBe('aaaaaaaaaaaa')
+    expect(store.getSnapshot().currentId).toBe('bbbbbbbbbbbb')
+    const read = context.calls.find((call) => call.method === 'showSession')
+    expect(read?.args).toEqual({ sessionId: 'aaaaaaaaaaaa' })
+  })
+
+  it('shows nothing when the conversation is bound to nothing', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']), null)
+    store = newStore(context)
+
+    await store.refresh()
+
+    expect(store.getSnapshot().boundSessionId).toBeNull()
+    expect(store.getSnapshot().session).toBeNull()
+    // No point reading a document the panel is not going to show.
+    expect(context.calls.some((call) => call.method === 'showSession')).toBe(false)
+  })
+
+  it('asks before taking a session away from another conversation', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', []), null)
+    context.answers['listSessions'] = () => ({
+      ok: true,
+      value: {
+        current_session_id: 'aaaaaaaaaaaa',
+        data_dir: '/tmp/dealbuddy',
+        bindings: [
+          { session_id: 'aaaaaaaaaaaa', dsh_session_id: 'conv-2', bound_at: 't' },
+        ],
+        sessions: [
+          { session_id: 'aaaaaaaaaaaa', category: '电视', raw_request: '', version: 1, phase: 'created', verified_count: 0, report_available: false, created_at: '1', updated_at: '1' },
+        ],
+      },
+    })
+    store = newStore(context)
+    store.setConversation(
+      { id: CONVERSATION, title: '对话' },
+      { [CONVERSATION]: '对话', 'conv-2': '另一段对话' },
+    )
+    await store.refresh()
+
+    await store.bind('aaaaaaaaaaaa')
+
+    // Moving it silently would leave that conversation talking about nothing.
+    expect(store.getSnapshot().pendingRebind?.fromTitle).toBe('另一段对话')
+    expect(context.calls.some((call) => call.method === 'bind')).toBe(false)
+
+    await store.resolveRebind(true)
+    expect(context.calls.find((call) => call.method === 'bind')?.args).toEqual({
+      sessionId: 'aaaaaaaaaaaa',
+      dshSessionId: CONVERSATION,
+    })
+  })
+
+  it('sends the evaluate request against the conversation on screen', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = newStore(context)
+    await store.refresh()
+
+    await store.evaluateReport()
+
+    // `agentId` is the Gateway's wire name for a live conversation.
+    expect(context.calls.find((call) => call.method === 'evaluateReport')?.args).toEqual({
+      agentId: CONVERSATION,
+    })
+    expect(store.getSnapshot().notice?.text).toBe('报告已发送到对话')
+  })
+
+  it('forgets the session on screen when the conversation changes', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = newStore(context)
+    await store.refresh()
+    expect(store.getSnapshot().session).not.toBeNull()
+
+    store.setConversation({ id: 'conv-2', title: '另一段' }, { 'conv-2': '另一段' })
+
+    // Showing the previous conversation's products under a new title would be
+    // worse than showing nothing for the moment it takes to re-read.
+    expect(store.getSnapshot().session).toBeNull()
+    expect(store.getSnapshot().boundSessionId).toBeNull()
   })
 })

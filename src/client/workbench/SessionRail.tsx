@@ -1,24 +1,36 @@
 import { text } from './format.js'
-import type { SessionSummaryView } from './types.js'
+import type { BindingView, SessionSummaryView } from './types.js'
 
 /** What the session rail needs. */
 export interface SessionRailProps {
   sessions: readonly SessionSummaryView[]
+  /** Where browser captures land. */
   currentId: string | null
+  /** The shopping session this conversation is about. */
+  boundSessionId: string | null
+  bindings: readonly BindingView[]
+  /** Conversation titles by id, for the rows that name one. */
+  conversations: Readonly<Record<string, string>>
+  /** Whether a conversation is on screen at all. */
+  hasConversation: boolean
   busy: boolean
   draftCategory: string
   draftRequest: string
   onDraft: (field: 'draftCategory' | 'draftRequest', value: string) => void
   onCreate: () => void
-  onSelect: (sessionId: string) => void
+  onBind: (sessionId: string) => void
+  onBindToNew: (sessionId: string) => void
+  onOpenConversation: (dshSessionId: string) => void
+  onSetTarget: (sessionId: string) => void
 }
 
 /**
  * The shopping sessions, newest first, plus the form that starts one.
  *
- * Selecting a session is the same act as pointing captures at it: the browser
- * extension always delivers into the current session and never names one, so a
- * separate "just look at it" mode would only mislead.
+ * A shopping session belongs to one conversation, so each row leads to that
+ * conversation rather than switching something inside this panel. Where
+ * captures land is a separate decision with its own control: the two are
+ * allowed to differ, and saying so is more honest than hiding it.
  * @param props - the sessions and their controls.
  * @returns the rail.
  */
@@ -26,7 +38,7 @@ export function SessionRail(props: SessionRailProps): JSX.Element {
   return (
     <>
       <h3 className="db-wb-section-title">购物会话</h3>
-      <p className="db-wb-hint">扩展会把商品投递到当前会话。</p>
+      <p className="db-wb-hint">一个购物会话对应一段对话。扩展采集投递到投递目标。</p>
       <form
         className="db-wb-form"
         onSubmit={(event) => {
@@ -73,26 +85,80 @@ export function SessionRail(props: SessionRailProps): JSX.Element {
         </div>
       ) : (
         <ul className="db-wb-sessions">
-          {props.sessions.map((session) => (
-            <li key={session.session_id}>
-              <button
-                className="db-wb-session"
-                type="button"
-                aria-current={session.session_id === props.currentId}
-                disabled={props.busy}
-                onClick={() => {
-                  props.onSelect(session.session_id)
-                }}
-              >
-                <span className="db-wb-session-name">{text(session.category, '未命名')}</span>
-                <span className="db-wb-session-meta">
-                  <span>{session.session_id}</span>
-                  <span>v{session.version}</span>
-                  <span>{session.verified_count} 件</span>
-                </span>
-              </button>
-            </li>
-          ))}
+          {props.sessions.map((session) => {
+            const binding = props.bindings.find((entry) => entry.session_id === session.session_id)
+            const isBound = session.session_id === props.boundSessionId
+            const isTarget = session.session_id === props.currentId
+            return (
+              <li key={session.session_id} className="db-wb-session-row" aria-current={isBound}>
+                <div className="db-wb-session">
+                  <span className="db-wb-session-name">
+                    {text(session.category, '未命名')}
+                    {isTarget ? <span className="db-wb-pill">投递目标</span> : null}
+                  </span>
+                  <span className="db-wb-session-meta">
+                    <span>{session.session_id}</span>
+                    <span>v{session.version}</span>
+                    <span>{session.verified_count} 件</span>
+                  </span>
+                  <span className="db-wb-session-meta">
+                    {binding === undefined
+                      ? '未绑定'
+                      : `对话：${props.conversations[binding.dsh_session_id] ?? binding.dsh_session_id}`}
+                  </span>
+                </div>
+                <div className="db-wb-actions">
+                  {binding === undefined || !isBound ? (
+                    <button
+                      className="db-wb-button"
+                      type="button"
+                      disabled={props.busy || !props.hasConversation}
+                      onClick={() => {
+                        props.onBind(session.session_id)
+                      }}
+                    >
+                      绑定到本对话
+                    </button>
+                  ) : null}
+                  {binding === undefined ? (
+                    <button
+                      className="db-wb-button"
+                      type="button"
+                      disabled={props.busy}
+                      onClick={() => {
+                        props.onBindToNew(session.session_id)
+                      }}
+                    >
+                      新建对话并绑定
+                    </button>
+                  ) : (
+                    <button
+                      className="db-wb-button"
+                      type="button"
+                      disabled={props.busy}
+                      onClick={() => {
+                        props.onOpenConversation(binding.dsh_session_id)
+                      }}
+                    >
+                      打开对话
+                    </button>
+                  )}
+                  {isTarget ? null : (
+                    <button
+                      className="db-wb-button"
+                      type="button"
+                      disabled={props.busy}
+                      onClick={() => {
+                        props.onSetTarget(session.session_id)
+                      }}
+                    >
+                      设为投递目标
+                    </button>
+                  )}
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
     </>

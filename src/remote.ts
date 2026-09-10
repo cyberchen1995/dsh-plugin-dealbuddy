@@ -1,19 +1,37 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 
+import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
+
 import type { SessionSummary } from './core/models.js'
+import { buildEvaluationMessage } from './services/binding-text.js'
+import { readBoundContext } from './services/bindings.js'
 import {
   OfferNotFoundError,
   createSession,
+  getReport,
   listSessions,
   removeOfferByUrl,
   setCurrentSession,
   showSession,
 } from './services/sessions.js'
 import { probeIntakeListener } from './services/status.js'
+import type { Binding, BindingStore } from './store/binding-store.js'
 import { isValidSessionId } from './store/paths.js'
 import { SessionNotFoundError, type SessionStore } from './store/session-store.js'
 import type { PlainJson } from './tools/shared.js'
+
+/**
+ * The part of a live conversation this plugin uses.
+ *
+ * Declared rather than imported from `@deepseek-ai/dsh-agent`: the Gateway
+ * resolves a parameter named `agent` into one of these, and this is every
+ * member the evaluate action touches.
+ */
+interface AgentLike {
+  readonly id: string
+  followup(message: ReturnType<typeof createUserMessage>): void
+}
 
 /**
  * Host half of the workbench panel: the same session operations the tools
@@ -43,6 +61,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'dealbuddy/session-not-found': { readonly sessionId: string }
     /** No captured product in that session carries the given URL. */
     'dealbuddy/offer-not-found': { readonly url: string }
+    /** The conversation has no shopping session behind it. */
+    'dealbuddy/not-bound': { readonly dshSessionId: string }
+    /** The bound session has nothing to evaluate yet. */
+    'dealbuddy/no-report': { readonly sessionId: string }
   }
 }
 
@@ -58,11 +80,13 @@ export interface WorkbenchStatus {
   reason?: string
 }
 
-/** The session list plus the pointer captures land in. */
+/** The session list, the pointer captures land in, and who owns what. */
 export interface WorkbenchSessions {
   current_session_id: string | null
   data_dir: string
   sessions: SessionSummary[]
+  /** Which conversation each shopping session belongs to. */
+  bindings: Binding[]
 }
 
 /**
@@ -78,10 +102,11 @@ export interface WorkbenchSessions {
 export function registerRemote(
   ctx: Context,
   store: SessionStore,
+  bindings: BindingStore,
   port: () => number,
 ): void {
   // eslint-disable-next-line no-new -- a Service registers itself on construction.
-  new DealbuddyRemote(ctx, store, port)
+  new DealbuddyRemote(ctx, store, bindings, port)
 }
 
 /** The `dealbuddy` Remote namespace. */
@@ -94,6 +119,7 @@ export class DealbuddyRemote extends TypertRemoteService {
   constructor(
     ctx: Context,
     private readonly store: SessionStore,
+    private readonly bindings: BindingStore,
     private readonly port: () => number,
   ) {
     super(ctx, 'dealbuddyController', { namespace: 'dealbuddy' })
@@ -105,7 +131,82 @@ export class DealbuddyRemote extends TypertRemoteService {
    */
   @Remote
   async listSessions(): Promise<WorkbenchSessions> {
-    return listSessions(this.store)
+    const [listed, bindings] = await Promise.all([listSessions(this.store), this.bindings.list()])
+    return { ...listed, bindings }
+  }
+
+  /**
+   * Make a conversation and a shopping session the same thing.
+   *
+   * Neither parameter may be called `agent` or `session`: those names are
+   * Gateway lookups that would resume the conversation just to record a note
+   * about it.
+   * @param sessionId - the shopping session.
+   * @param dshSessionId - the conversation it belongs to.
+   * @returns the binding that was written.
+   */
+  @Remote
+  async bind(sessionId: string, dshSessionId: string): Promise<{ binding: Binding }> {
+    this.assertSessionId(sessionId)
+    this.assertConversationId(dshSessionId)
+    const session = await this.store.load(sessionId)
+    if (session === undefined) {
+      throw new RemoteError('dealbuddy/session-not-found', `Unknown session: ${sessionId}`, {
+        sessionId,
+      })
+    }
+    return { binding: await this.bindings.bind(sessionId, dshSessionId) }
+  }
+
+  /**
+   * Forget whatever a conversation was about.
+   * @param dshSessionId - the conversation.
+   * @returns whether anything was removed.
+   */
+  @Remote
+  async unbind(dshSessionId: string): Promise<{ removed: boolean }> {
+    this.assertConversationId(dshSessionId)
+    return { removed: await this.bindings.unbindConversation(dshSessionId) }
+  }
+
+  /**
+   * Ask the model in this conversation to go through its report.
+   *
+   * The parameter is named `agent` on purpose: the Gateway turns it into the
+   * live conversation, resuming a cold one, which is exactly what sending it a
+   * message requires.
+   * @param agent - the conversation, resolved by the Gateway.
+   * @returns the session whose report was sent.
+   */
+  @Remote
+  async evaluateReport(agent: AgentLike): Promise<{ session_id: string }> {
+    const bound = readBoundContext(this.store, this.bindings, agent.id)
+    if (bound === undefined || 'missing' in bound) {
+      throw new RemoteError(
+        'dealbuddy/not-bound',
+        'this conversation has no shopping session behind it',
+        { dshSessionId: agent.id },
+      )
+    }
+    const report = await getReport(this.store, bound.session_id)
+    if (report.report === '') {
+      throw new RemoteError('dealbuddy/no-report', 'this session has no report yet', {
+        sessionId: bound.session_id,
+      })
+    }
+    const message = buildEvaluationMessage(report.report, bound)
+    agent.followup(
+      createUserMessage({
+        content: [{ type: 'text', text: message.text }],
+        source: {
+          kind: 'plugin',
+          plugin: 'dealbuddy',
+          form: 'notice',
+          summary: boundContextSummary(message.summary),
+        },
+      }),
+    )
+    return { session_id: bound.session_id }
   }
 
   /**
@@ -218,6 +319,17 @@ export class DealbuddyRemote extends TypertRemoteService {
   private assertSessionId(sessionId: string): void {
     if (typeof sessionId !== 'string' || !isValidSessionId(sessionId)) {
       throw new RemoteError('gateway/bad-request', 'session_id is not a session id', {})
+    }
+  }
+
+  /**
+   * Reject a conversation id that could not be one.
+   * @param dshSessionId - the caller's id.
+   * @throws RemoteError when it is not a usable identity.
+   */
+  private assertConversationId(dshSessionId: string): void {
+    if (typeof dshSessionId !== 'string' || dshSessionId.trim() === '') {
+      throw new RemoteError('gateway/bad-request', 'dshSessionId is required', {})
     }
   }
 

@@ -4,6 +4,7 @@ import { Config } from './config.js'
 import { startIntakeServer } from './intake/server.js'
 import { registerSettings, type DealbuddySettings } from './settings.js'
 import { registerSkill } from './skill.js'
+import { BindingStore } from './store/binding-store.js'
 import { resolveDataDir } from './store/paths.js'
 import { SessionStore } from './store/session-store.js'
 import { registerTools } from './tools/index.js'
@@ -34,6 +35,7 @@ export function apply(ctx: Context, config: Config): void {
   registerTools(
     ctx,
     runtime.store,
+    runtime.bindings,
     () => runtime.settings.ocrTextPreviewChars,
     () => runtime.settings.port,
   )
@@ -62,12 +64,35 @@ export function apply(ctx: Context, config: Config): void {
     apply(remoteCtx: Context) {
       void import('./remote.js')
         .then((module) => {
-          module.registerRemote(remoteCtx, runtime.store, () => runtime.settings.port)
+          module.registerRemote(
+            remoteCtx,
+            runtime.store,
+            runtime.bindings,
+            () => runtime.settings.port,
+          )
         })
         .catch((error: unknown) => {
           remoteCtx
             .logger('dealbuddy')
             .warn('workbench panel endpoints unavailable: %s', String(error))
+        })
+    },
+  })
+
+  // Telling the model which shopping session a conversation is about needs the
+  // prompt registry, which a headless composition may not mount.
+  ctx.plugin({
+    name: 'dealbuddy-context',
+    inject: ['systemPrompt'],
+    apply(promptCtx: Context) {
+      void import('./context.js')
+        .then((module) => {
+          module.registerBindingContext(promptCtx, runtime.store, runtime.bindings)
+        })
+        .catch((error: unknown) => {
+          promptCtx
+            .logger('dealbuddy')
+            .warn('shopping-session context unavailable: %s', String(error))
         })
     },
   })
@@ -95,6 +120,9 @@ class PluginRuntime {
   /** The store the tools hold; it follows a data-directory change in place. */
   readonly store: SessionStore
 
+  /** Which conversation each shopping session belongs to. */
+  readonly bindings: BindingStore
+
   private closeServer: (() => Promise<void>) | undefined
   private starting: Promise<void> = Promise.resolve()
 
@@ -114,6 +142,10 @@ class PluginRuntime {
       legacyOffersRoute: config.legacyOffersRoute,
     }
     this.store = new SessionStore(resolveDataDir(this.settings.dataDir))
+    this.bindings = new BindingStore(resolveDataDir(this.settings.dataDir))
+    // Warm the table once: the prompt provider has to answer synchronously,
+    // and an unread table would make every conversation look unbound.
+    void this.bindings.list().catch(() => undefined)
   }
 
   /**
@@ -173,7 +205,11 @@ class PluginRuntime {
       next.extraAllowedDomains.join(',') !== prev.extraAllowedDomains.join(',') ||
       dataDirMoved
     this.settings = next
-    if (dataDirMoved) this.store.useDataDir(resolveDataDir(next.dataDir))
+    if (dataDirMoved) {
+      this.store.useDataDir(resolveDataDir(next.dataDir))
+      this.bindings.useDataDir(resolveDataDir(next.dataDir))
+      void this.bindings.list().catch(() => undefined)
+    }
     if (!listenerMoved) return
     await this.stop()
     await this.start()

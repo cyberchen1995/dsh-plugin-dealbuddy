@@ -5,7 +5,9 @@ import {
   setCurrentSession,
   showSession,
 } from '../services/sessions.js'
+import type { BindingStore } from '../store/binding-store.js'
 import type { SessionStore } from '../store/session-store.js'
+import { resolveSessionId } from './shared.js'
 
 /**
  * Session lifecycle tools: create, show, and point captures at a session.
@@ -50,6 +52,7 @@ export function createSessionTool(store: SessionStore): ToolDefinition {
  */
 export function showSessionTool(
   store: SessionStore,
+  bindings: BindingStore,
   ocrPreviewChars: () => number,
 ): ToolDefinition {
   return defineTool({
@@ -57,7 +60,7 @@ export function showSessionTool(
     description:
       'Show one session with every captured product. Use this rather than the report when explaining the options: the report only has four slots, so a product that meets the requirements without being the best or the cheapest never appears in it. Recognised detail-image text is shortened by default.',
     parameters: {
-      session_id: { type: 'string', required: true, description: 'The session to show.' },
+      session_id: { type: 'string', description: 'The session to show. Omit to use the shopping session bound to the current conversation.' },
       include_ocr_text: {
         type: 'boolean',
         description: 'Keep the full recognised detail-image text instead of a preview.',
@@ -76,8 +79,9 @@ export function showSessionTool(
         ? undefined
         : { card: 'generic', title: `DealBuddy 会话 ${sessionIdOf(args)}` },
     isConcurrencySafe: () => true,
-    async execute(args) {
-      return showSession(store, args.session_id, {
+    async execute(args, exec) {
+      const sessionId = await resolveSessionId(args.session_id, exec, bindings)
+      return showSession(store, sessionId, {
         includeOcrText: args.include_ocr_text === true,
         includeMessages: args.include_messages === true,
         ocrPreviewChars: ocrPreviewChars(),

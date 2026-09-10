@@ -9,6 +9,7 @@ import { addOfferTool, getReportTool, refineRequirementsTool, removeOfferTool } 
 import { createSessionTool, setCurrentSessionTool, showSessionTool } from '../../src/tools/sessions.js'
 import { listSessionsTool } from '../../src/tools/list-sessions.js'
 import { parseJson, type JsonObject } from '../../src/store/json.js'
+import { BindingStore } from '../../src/store/binding-store.js'
 import { SessionStore } from '../../src/store/session-store.js'
 
 /**
@@ -21,6 +22,7 @@ import { SessionStore } from '../../src/store/session-store.js'
 
 let dataDir: string
 let store: SessionStore
+let bindings: BindingStore
 
 /**
  * Invoke a tool's execute with a minimal run context.
@@ -67,6 +69,7 @@ beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'dealbuddy-tools-'))
   await mkdir(join(dataDir, 'sessions'), { recursive: true })
   store = new SessionStore(dataDir)
+  bindings = new BindingStore(dataDir)
 })
 
 describe('dealbuddy_create_session', () => {
@@ -108,11 +111,11 @@ describe('dealbuddy_add_offer and dealbuddy_remove_offer', () => {
     const created = await run(createSessionTool(store), { category: '电视', request: '预算 5000 以内' })
     const sessionId = created['current_session_id'] as string
 
-    const added = await run(addOfferTool(store), offerArgs(sessionId))
+    const added = await run(addOfferTool(store, bindings), offerArgs(sessionId))
     expect(added['verified_count']).toBe(1)
     expect(added['report_available']).toBe(true)
 
-    const removed = await run(removeOfferTool(store), {
+    const removed = await run(removeOfferTool(store, bindings), {
       session_id: sessionId,
       url: 'https://item.jd.com/100000000001.html',
     })
@@ -125,7 +128,7 @@ describe('dealbuddy_add_offer and dealbuddy_remove_offer', () => {
   it('refuses to remove a product that is not there', async () => {
     const created = await run(createSessionTool(store), { category: '电视', request: '' })
     await expect(
-      run(removeOfferTool(store), {
+      run(removeOfferTool(store, bindings), {
         session_id: created['current_session_id'] as string,
         url: 'https://item.jd.com/nope.html',
       }),
@@ -135,8 +138,8 @@ describe('dealbuddy_add_offer and dealbuddy_remove_offer', () => {
   it('replaces the earlier record when the same URL is added twice', async () => {
     const created = await run(createSessionTool(store), { category: '电视', request: '' })
     const sessionId = created['current_session_id'] as string
-    await run(addOfferTool(store), offerArgs(sessionId))
-    const second = await run(addOfferTool(store), offerArgs(sessionId, { visible_price: '3999' }))
+    await run(addOfferTool(store, bindings), offerArgs(sessionId))
+    const second = await run(addOfferTool(store, bindings), offerArgs(sessionId, { visible_price: '3999' }))
     expect(second['verified_count']).toBe(1)
     const offers = (await readSession(sessionId)).get('verified_offers') as JsonObject[]
     expect(offers[0]?.get('visible_price')).toBe('3999')
@@ -147,9 +150,9 @@ describe('dealbuddy_show_session', () => {
   it('shortens recognised detail-image text by default', async () => {
     const created = await run(createSessionTool(store), { category: '电视', request: '' })
     const sessionId = created['current_session_id'] as string
-    await run(addOfferTool(store), offerArgs(sessionId))
+    await run(addOfferTool(store, bindings), offerArgs(sessionId))
 
-    const shown = await run(showSessionTool(store, () => 400), { session_id: sessionId })
+    const shown = await run(showSessionTool(store, bindings, () => 400), { session_id: sessionId })
     expect(shown['ocr_text_shortened_offers']).toBe(1)
     const session = shown['session'] as Record<string, unknown>
     const offers = session['verified_offers'] as Record<string, unknown>[]
@@ -166,8 +169,8 @@ describe('dealbuddy_show_session', () => {
   it('keeps the full text when asked', async () => {
     const created = await run(createSessionTool(store), { category: '电视', request: '' })
     const sessionId = created['current_session_id'] as string
-    await run(addOfferTool(store), offerArgs(sessionId))
-    const shown = await run(showSessionTool(store, () => 400), {
+    await run(addOfferTool(store, bindings), offerArgs(sessionId))
+    const shown = await run(showSessionTool(store, bindings, () => 400), {
       session_id: sessionId,
       include_ocr_text: true,
     })
@@ -184,9 +187,9 @@ describe('dealbuddy_refine_requirements', () => {
       request: '预算 5000 以内',
     })
     const sessionId = created['current_session_id'] as string
-    await run(addOfferTool(store), offerArgs(sessionId))
+    await run(addOfferTool(store, bindings), offerArgs(sessionId))
 
-    const refined = await run(refineRequirementsTool(store), {
+    const refined = await run(refineRequirementsTool(store, bindings), {
       session_id: sessionId,
       changes: { budget_max: '3000', must_have: { 刷新率: '120Hz' } },
     })
@@ -207,7 +210,7 @@ describe('dealbuddy_refine_requirements', () => {
   it('resets the version and phase when the category changes', async () => {
     const created = await run(createSessionTool(store), { category: '电视', request: '预算 5000 以内' })
     const sessionId = created['current_session_id'] as string
-    const refined = await run(refineRequirementsTool(store), {
+    const refined = await run(refineRequirementsTool(store, bindings), {
       session_id: sessionId,
       changes: { category: '投影仪' },
     })
@@ -225,18 +228,18 @@ describe('read-only tools', () => {
     const second = await run(createSessionTool(store), { category: '电饭煲', request: '' })
     const firstId = first['current_session_id'] as string
     const secondId = second['current_session_id'] as string
-    await run(addOfferTool(store), offerArgs(firstId))
+    await run(addOfferTool(store, bindings), offerArgs(firstId))
 
     const listed = await run(listSessionsTool(store), {})
     expect(listed['current_session_id']).toBe(secondId)
     const sessions = listed['sessions'] as Record<string, unknown>[]
     expect(sessions).toHaveLength(2)
 
-    const report = await run(getReportTool(store), { session_id: firstId })
+    const report = await run(getReportTool(store, bindings), { session_id: firstId })
     expect(report['report']).toContain('# DealBuddy 选品报告：电视')
     expect(report['report']).toContain('不代表结算价格')
 
-    const empty = await run(getReportTool(store), { session_id: secondId })
+    const empty = await run(getReportTool(store, bindings), { session_id: secondId })
     expect(empty['report']).toBe('')
   })
 

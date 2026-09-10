@@ -1,3 +1,4 @@
+import type { BindingStore } from '../store/binding-store.js'
 import type { JsonObject, JsonValue } from '../store/json.js'
 import { getString } from '../store/json.js'
 
@@ -97,4 +98,38 @@ export function writeSummary(
     verified_count: Array.isArray(offers) ? offers.length : 0,
     report_available: typeof report === 'string' && report.length > 0,
   }
+}
+
+/** The part of a tool's run context this plugin reads. */
+export interface ExecLike {
+  readonly agent?: { readonly id: string } | undefined
+}
+
+/**
+ * Resolve which shopping session a call is about.
+ *
+ * A conversation and a shopping session are one thing, so a call made inside a
+ * bound conversation does not have to name it. Passing `session_id` explicitly
+ * still wins: the model may be answering about a session other than the one
+ * this conversation belongs to.
+ * @param sessionId - the argument, when the caller gave one.
+ * @param exec - the run context, which names the conversation.
+ * @param bindings - the binding table.
+ * @returns the session id to act on.
+ * @throws when neither the argument nor a binding names one.
+ */
+export async function resolveSessionId(
+  sessionId: string | undefined,
+  exec: ExecLike,
+  bindings: BindingStore,
+): Promise<string> {
+  if (typeof sessionId === 'string' && sessionId !== '') return sessionId
+  const agentId = exec.agent?.id
+  if (agentId !== undefined) {
+    const binding = await bindings.byConversation(agentId)
+    if (binding !== undefined) return binding.session_id
+  }
+  throw new Error(
+    'No shopping session is bound to this conversation. Pass session_id explicitly, or ask the user to bind one in the DealBuddy drawer.',
+  )
 }
