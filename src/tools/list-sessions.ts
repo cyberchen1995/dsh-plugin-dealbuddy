@@ -2,6 +2,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 
 import type { SessionSummary } from '../core/models.js'
+import { listSessions } from '../services/sessions.js'
 import type { SessionStore } from '../store/session-store.js'
 
 /**
@@ -61,15 +62,7 @@ export function listSessionsTool(store: SessionStore): ToolDefinition {
     },
     isConcurrencySafe: () => true,
     async execute() {
-      const [sessions, currentSessionId] = await Promise.all([
-        store.listSummaries(),
-        store.currentSessionId(),
-      ])
-      return {
-        current_session_id: currentSessionId ?? null,
-        data_dir: store.dataDir,
-        sessions,
-      }
+      return listSessions(store)
     },
   })
 }

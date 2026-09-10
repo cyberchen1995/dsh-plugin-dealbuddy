@@ -48,13 +48,49 @@ export interface SettingsScopeLike<T> {
   unset(field: string): Promise<void>
 }
 
-/** The browser services the card's registration reaches for. */
+/** One endpoint's answer, as Connection hands it back. */
+export type RpcResultLike =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } }
+
+/** One slot registration's options, across the kinds this plugin uses. */
+export interface SlotRegisterOptions {
+  name: string
+  /** Keyed slots dispatch on this. */
+  key?: string
+  /** List slots identify their entry by this. */
+  id?: string
+  /** List position. */
+  order?: number
+}
+
+/** The browser services this plugin's registrations reach for. */
 export interface ClientContextLike {
   slots: {
     inject(key: string, callback: () => () => void): () => void
-    register(options: { name: string; key: string }, component: unknown): () => void
+    register(options: SlotRegisterOptions, component: unknown): () => void
   }
   settingsScope: {
     bind<T>(spec: { namespace: string }): SettingsScopeLike<T>
   }
+  connection: {
+    rpc: {
+      call(
+        channel: string,
+        endpoint: string,
+        payload: unknown,
+        signal?: AbortSignal,
+      ): Promise<RpcResultLike>
+    }
+  }
+  /**
+   * @param event - the cordis event name.
+   * @param listener - invoked on each occurrence.
+   * @returns the disposer removing the listener.
+   */
+  on(event: string, listener: () => void): () => void
+  /**
+   * @param body - run now; its returned disposer runs when the fiber unloads.
+   */
+  effect(body: () => () => void): void
 }

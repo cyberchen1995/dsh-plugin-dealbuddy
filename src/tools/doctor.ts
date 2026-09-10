@@ -2,6 +2,7 @@ import { access, constants, mkdir, readdir, rm, writeFile } from 'node:fs/promis
 import { join } from 'node:path'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 
+import { probeIntakeListener } from '../services/status.js'
 import { SESSIONS_DIRNAME } from '../store/paths.js'
 import type { SessionStore } from '../store/session-store.js'
 
@@ -120,33 +121,11 @@ async function checkSessions(store: SessionStore): Promise<Check> {
  * @returns the check result.
  */
 async function checkListener(port: number, signal: AbortSignal): Promise<Check> {
-  const url = `http://127.0.0.1:${port}/api/current/offers`
-  try {
-    const response = await fetch(url, {
-      method: 'OPTIONS',
-      headers: { Origin: 'https://item.jd.com' },
-      signal,
-    })
-    const pna = response.headers.get('access-control-allow-private-network')
-    if (response.status !== 204) {
-      return { name: 'capture listener', ok: false, detail: `${url} answered ${response.status}` }
-    }
-    if (pna !== 'true') {
-      // Chrome refuses a shop page's request to a loopback address without it.
-      return {
-        name: 'capture listener',
-        ok: false,
-        detail: 'preflight is missing Access-Control-Allow-Private-Network',
-      }
-    }
-    return { name: 'capture listener', ok: true, detail: `${url} answers preflight correctly` }
-  } catch (error) {
-    return {
-      name: 'capture listener',
-      ok: false,
-      detail: `${url} is unreachable: ${String(error)}`,
-    }
+  const probe = await probeIntakeListener(port, signal)
+  if (!probe.ok) {
+    return { name: 'capture listener', ok: false, detail: probe.reason ?? 'preflight failed' }
   }
+  return { name: 'capture listener', ok: true, detail: `${probe.url} answers preflight correctly` }
 }
 
 /**

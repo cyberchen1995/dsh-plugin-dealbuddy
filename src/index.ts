@@ -54,6 +54,24 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  // The workbench panel's Host endpoints. The Typert protocol package is an
+  // optional peer, so it is imported only inside this fiber: a deployment
+  // without it keeps the tools and the capture listener.
+  ctx.plugin({
+    name: 'dealbuddy-remote',
+    apply(remoteCtx: Context) {
+      void import('./remote.js')
+        .then((module) => {
+          module.registerRemote(remoteCtx, runtime.store, () => runtime.settings.port)
+        })
+        .catch((error: unknown) => {
+          remoteCtx
+            .logger('dealbuddy')
+            .warn('workbench panel endpoints unavailable: %s', String(error))
+        })
+    },
+  })
+
   ctx.plugin({
     name: 'dealbuddy-skill',
     inject: ['skills'],

@@ -3,10 +3,11 @@ import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { nowIso } from '../core/clock.js'
 import { writeVerifiedOffer, type StringMap } from '../core/domain.js'
 import { captureToVerifiedOffer, CONFIDENCES, PLATFORMS } from '../core/capture.js'
-import { offerNodes, rebuildReport, removeOffer, upsertOffer } from '../core/session.js'
-import type { JsonObject } from '../store/json.js'
+import { offerNodes, rebuildReport, upsertOffer } from '../core/session.js'
 import { refineSession } from '../core/refine.js'
+import { getReport, removeOfferByUrl } from '../services/sessions.js'
 import type { SessionStore } from '../store/session-store.js'
+import { sessionIdOf } from './sessions.js'
 import { toPlain, writeSummary } from './shared.js'
 
 /**
@@ -103,15 +104,7 @@ export function removeOfferTool(store: SessionStore): ToolDefinition {
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderWrite(value) }] },
     async execute(args) {
-      return store.update(args.session_id, (session) => {
-        const removed = removeOffer(session, args.url)
-        if (removed.length === 0) throw new Error('该商品已不在当前会话中')
-        rebuildReport(session)
-        return {
-          ...writeSummary(session, args.session_id),
-          removed_offer: toPlain(removed[0] as JsonObject),
-        }
-      })
+      return removeOfferByUrl(store, args.session_id, args.url)
     },
   })
 }
@@ -201,12 +194,13 @@ export function getReportTool(store: SessionStore): ToolDefinition {
         },
       ],
     },
+    presentResult: (args, result) =>
+      result.isError
+        ? undefined
+        : { card: 'generic', title: `DealBuddy 选品报告 · ${sessionIdOf(args)}` },
     isConcurrencySafe: () => true,
     async execute(args) {
-      const session = await store.load(args.session_id)
-      if (session === undefined) throw new Error(`Unknown session: ${args.session_id}`)
-      const report = session.get('report_markdown')
-      return { session_id: args.session_id, report: typeof report === 'string' ? report : '' }
+      return getReport(store, args.session_id)
     },
   })
 }
