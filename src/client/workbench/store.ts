@@ -28,6 +28,15 @@ function isPageVisible(): boolean {
 export interface PendingDelete {
   url: string
   title: string
+  /**
+   * The session the card came from, captured when the dialog opened.
+   *
+   * Stopping the poll does not cancel a refresh already on the wire, so the
+   * current-session pointer can still move while the dialog is up. Reading it
+   * at confirmation time would pair this URL with whatever session is current
+   * by then — and delete the wrong product when both sessions hold that URL.
+   */
+  sessionId: string
 }
 
 /** Everything the panel renders from. */
@@ -86,6 +95,8 @@ export class WorkbenchStore {
   #trigger: HTMLElement | null = null
   /** Bumped by every refresh; a response from an older one is abandoned. */
   #generation = 0
+  /** True while a refresh is on the wire, so a timer tick can stand down. */
+  #refreshing = false
   /** Set by dispose(); nothing may arm a timer after it. */
   #disposed = false
   /** Identity of the session list currently in state, so an unchanged list keeps its array. */
@@ -185,9 +196,19 @@ export class WorkbenchStore {
     this.#set({ [field]: value } as Partial<WorkbenchState>)
   }
 
-  /** Open the delete confirmation for one product. */
-  askDelete(pending: PendingDelete | null): void {
-    this.#set({ pendingDelete: pending })
+  /**
+   * Open the delete confirmation for one product, or close it.
+   * @param pending - the product the card is showing, or null to dismiss.
+   */
+  askDelete(pending: { url: string; title: string } | null): void {
+    if (pending === null) {
+      this.#set({ pendingDelete: null })
+      this.#retimer()
+      return
+    }
+    const sessionId = this.#state.currentId
+    if (sessionId === null) return
+    this.#set({ pendingDelete: { ...pending, sessionId } })
     this.#retimer()
   }
 
@@ -213,7 +234,9 @@ export class WorkbenchStore {
       const status = await callWorkbench<WorkbenchStatusView>(this.ctx, 'status', {})
       this.#set({ status })
     } catch {
-      // The header simply shows nothing when the probe itself is unreachable.
+      // The header shows nothing rather than the last answer: a stale line
+      // would keep claiming the old address is listening after a Host restart.
+      this.#set({ status: null })
     }
   }
 
@@ -233,6 +256,11 @@ export class WorkbenchStore {
     // explicit refresh or a new action does that.
     const settled = options.silent ? {} : { error: null }
     if (!options.silent) this.#set({ loading: true })
+    this.#refreshing = true
+    // Set once the list read has established where the Host now points, so a
+    // failure below can tell "could not read the document" from "did not get
+    // as far as asking".
+    let pointer: string | null | undefined
     try {
       const listed = await callWorkbench<{
         current_session_id: string | null
@@ -243,6 +271,7 @@ export class WorkbenchStore {
       // just made.
       const sessions = this.#keepSessions([...listed.sessions].reverse())
       const currentId = listed.current_session_id
+      pointer = currentId
       if (currentId === null) {
         this.#set({ sessions, currentId, session: null, loading: false, ...settled })
         return
@@ -273,6 +302,11 @@ export class WorkbenchStore {
       // A session whose file is gone must not keep rendering its products.
       if (error instanceof RpcFailure && error.code === 'dealbuddy/session-not-found') {
         this.#set({ session: null, currentId: null })
+      } else if (pointer !== undefined && pointer !== this.#state.currentId) {
+        // The pointer moved but its document would not read (unreadable or
+        // malformed file). Keeping the old pair would leave the rail claiming
+        // captures still land in the session on screen, which is now false.
+        this.#set({ currentId: pointer, session: null })
       }
       if (options.silent) {
         // A failed poll retries on the next tick, exactly as the Python
@@ -282,6 +316,8 @@ export class WorkbenchStore {
         return
       }
       this.#set({ loading: false, error: describeFailure(error) })
+    } finally {
+      if (generation === this.#generation) this.#refreshing = false
     }
   }
 
@@ -320,17 +356,19 @@ export class WorkbenchStore {
    */
   async confirmDelete(): Promise<void> {
     const pending = this.#state.pendingDelete
-    const sessionId = this.#state.currentId
     this.#set({ pendingDelete: null })
-    if (pending === null || sessionId === null) {
+    if (pending === null) {
       this.#retimer()
       return
     }
     await this.#write(async () => {
-      // Deleting by URL: the Host resolves identity to position inside the
-      // session's own lock, so a capture during the confirmation cannot make
-      // this remove a different product.
-      await callWorkbench(this.ctx, 'removeOffer', { sessionId, url: pending.url })
+      // Deleting by URL, in the session the card came from: the Host resolves
+      // identity to position inside that session's own lock, so a capture
+      // during the confirmation cannot make this remove a different product.
+      await callWorkbench(this.ctx, 'removeOffer', {
+        sessionId: pending.sessionId,
+        url: pending.url,
+      })
       this.#notice('商品已删除')
     })
   }
@@ -373,6 +411,10 @@ export class WorkbenchStore {
         // Checked again per tick, as the Python workbench does: a missed
         // visibility transition then costs nothing instead of polling forever.
         if (this.#disposed || !isPageVisible()) return
+        // A session whose two reads take longer than the interval would
+        // otherwise have every tick start another refresh and invalidate the
+        // one before it, so nothing would ever commit.
+        if (this.#refreshing) return
         void this.refresh({ silent: true })
       }, SYNC_INTERVAL_MS)
       return

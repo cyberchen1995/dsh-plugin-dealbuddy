@@ -331,4 +331,99 @@ describe('workbench store', () => {
       else delete globals.document
     }
   })
+
+  it('deletes from the session the card came from, not whatever is current later', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['shared-url']))
+    store = new WorkbenchStore(context.asContext())
+    await store.refresh()
+
+    // The dialog opens against session A.
+    store.askDelete({ url: 'shared-url', title: '商品' })
+
+    // Something outside the panel points the Host at session B while the
+    // dialog is up; a refresh already on the wire commits that pointer.
+    answerWith(context, 'bbbbbbbbbbbb', session('t2', ['shared-url']))
+    await store.refresh()
+    expect(store.getSnapshot().currentId).toBe('bbbbbbbbbbbb')
+
+    await store.confirmDelete()
+
+    const removal = context.calls.find((call) => call.method === 'removeOffer')
+    expect(removal?.args).toEqual({ sessionId: 'aaaaaaaaaaaa', url: 'shared-url' })
+  })
+
+  it('shows nothing in the header when the status probe fails', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    context.answers['status'] = () => ({
+      ok: true,
+      value: { data_dir: '/tmp/dealbuddy', intake_url: 'http://127.0.0.1:8766/api/current/offers', listening: true },
+    })
+    store = new WorkbenchStore(context.asContext())
+    await store.refreshStatus()
+    expect(store.getSnapshot().status?.listening).toBe(true)
+
+    // A Host restart: the old line would keep claiming that address listens.
+    context.answers['status'] = () => ({
+      ok: false,
+      error: { code: 'gateway/service-unavailable', message: 'gone' },
+    })
+    await store.refreshStatus()
+
+    expect(store.getSnapshot().status).toBeNull()
+  })
+
+  it('drops the session on screen when the pointer moved but its file will not read', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = new WorkbenchStore(context.asContext())
+    await store.refresh()
+
+    answerWith(context, 'bbbbbbbbbbbb', session('t2', ['b']))
+    context.answers['showSession'] = () => ({
+      ok: false,
+      error: { code: 'gateway/internal', message: 'malformed session file' },
+    })
+    await store.refresh({ silent: true })
+
+    // The rail must not keep marking the old session as the capture target.
+    expect(store.getSnapshot().currentId).toBe('bbbbbbbbbbbb')
+    expect(store.getSnapshot().session).toBeNull()
+  })
+
+  it('skips a timer tick while a refresh is still on the wire', async () => {
+    const fake = { visibilityState: 'visible' }
+    const globals = globalThis as { document?: unknown }
+    const had = 'document' in globals
+    globals.document = fake
+    vi.useFakeTimers()
+    try {
+      const context = new FakeContext()
+      answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+      const slow = new WorkbenchStore(context.asContext())
+      slow.toggle()
+      await vi.advanceTimersByTimeAsync(0)
+
+      // A session big enough that its two reads outlast the interval.
+      const stalled = deferred()
+      context.answers['showSession'] = () => stalled.promise
+      await vi.advanceTimersByTimeAsync(SYNC_INTERVAL_MS + 100)
+      const started = context.calls.filter((call) => call.method === 'listSessions').length
+
+      await vi.advanceTimersByTimeAsync(SYNC_INTERVAL_MS * 3)
+
+      // Every tick starting another refresh would invalidate the one before it,
+      // so nothing would ever commit.
+      expect(context.calls.filter((call) => call.method === 'listSessions')).toHaveLength(started)
+
+      stalled.settle({ ok: true, value: session('t2', ['a', 'b']) })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(offersOf(slow.getSnapshot().session)).toHaveLength(2)
+      slow.dispose()
+    } finally {
+      vi.useRealTimers()
+      if (!had) delete globals.document
+    }
+  })
 })
