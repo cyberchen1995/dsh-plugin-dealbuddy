@@ -97,6 +97,8 @@ export class WorkbenchStore {
   #generation = 0
   /** True while a refresh is on the wire, so a timer tick can stand down. */
   #refreshing = false
+  /** Bumped by every status probe; an older answer is dropped. */
+  #statusGeneration = 0
   /** Set by dispose(); nothing may arm a timer after it. */
   #disposed = false
   /** Identity of the session list currently in state, so an unchanged list keeps its array. */
@@ -230,10 +232,16 @@ export class WorkbenchStore {
    * @returns settlement once the probe answered.
    */
   async refreshStatus(): Promise<void> {
+    // Probes overlap — opening, a reconnect and a visibility change can each
+    // start one — and nothing else refreshes this line, so an older answer
+    // landing last would leave a wrong address on screen indefinitely.
+    const generation = ++this.#statusGeneration
     try {
       const status = await callWorkbench<WorkbenchStatusView>(this.ctx, 'status', {})
+      if (generation !== this.#statusGeneration) return
       this.#set({ status })
     } catch {
+      if (generation !== this.#statusGeneration) return
       // The header shows nothing rather than the last answer: a stale line
       // would keep claiming the old address is listening after a Host restart.
       this.#set({ status: null })
@@ -326,14 +334,19 @@ export class WorkbenchStore {
    * @returns settlement once the panel shows the new session.
    */
   async createSession(): Promise<void> {
-    const category = this.#state.draftCategory.trim()
-    if (category === '') return
+    // Sent as typed, validated on the trimmed value: the tool face does not
+    // trim either, and both faces have to write the same file.
+    const category = this.#state.draftCategory
+    const request = this.#state.draftRequest
+    if (category.trim() === '') return
     await this.#write(async () => {
-      await callWorkbench(this.ctx, 'createSession', {
-        category,
-        request: this.#state.draftRequest,
+      await callWorkbench(this.ctx, 'createSession', { category, request })
+      // Clear only what was actually submitted. The inputs stay live during
+      // the call, so anything typed since belongs to the next session.
+      this.#set({
+        ...(this.#state.draftCategory === category ? { draftCategory: '' } : {}),
+        ...(this.#state.draftRequest === request ? { draftRequest: '' } : {}),
       })
-      this.#set({ draftCategory: '', draftRequest: '' })
       this.#notice('会话已创建，采集会投递到这里')
     })
   }

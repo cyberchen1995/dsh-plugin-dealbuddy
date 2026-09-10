@@ -50,6 +50,11 @@ export function OfferCard(props: OfferCardProps): JSX.Element {
         aria-label={`${title} 的详情`}
         onClick={props.onToggle}
         onKeyDown={(event) => {
+          // Only when the row itself holds focus. Enter on the nested product
+          // link has to reach the link — the mouse path works because the
+          // anchor stops propagation, but a key event would otherwise bubble
+          // here and toggle the card instead of opening the page.
+          if (event.target !== event.currentTarget) return
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
             props.onToggle()

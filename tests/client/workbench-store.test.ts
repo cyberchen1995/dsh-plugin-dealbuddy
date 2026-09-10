@@ -188,9 +188,11 @@ describe('workbench store', () => {
 
     // The source-mode Gateway matches these keys against the Host method's
     // parameter names and refuses anything else, so the names are a contract.
+    // The value goes as typed: the tool face does not trim either, and both
+    // faces have to write the same file.
     expect(context.calls[0]).toEqual({
       method: 'createSession',
-      args: { category: '电视', request: '预算5000以内' },
+      args: { category: ' 电视 ', request: '预算5000以内' },
     })
     expect(store.getSnapshot().draftCategory).toBe('')
   })
@@ -425,5 +427,56 @@ describe('workbench store', () => {
       vi.useRealTimers()
       if (!had) delete globals.document
     }
+  })
+
+  it('keeps edits typed while the session was being created', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', []))
+    const stalled = deferred()
+    context.answers['createSession'] = () => stalled.promise
+    store = new WorkbenchStore(context.asContext())
+    store.setDraft('draftCategory', '电视')
+    store.setDraft('draftRequest', '预算5000以内')
+
+    const creating = store.createSession()
+    // The inputs stay live during the call, so this belongs to the next session.
+    store.setDraft('draftCategory', '扫地机器人')
+    stalled.settle({ ok: true, value: { session_id: 'cccccccccccc' } })
+    await creating
+
+    expect(store.getSnapshot().draftCategory).toBe('扫地机器人')
+    // The request was not touched since it was submitted, so it does clear.
+    expect(store.getSnapshot().draftRequest).toBe('')
+  })
+
+  it('lets the newest status probe win', async () => {
+    const context = new FakeContext()
+    const slow = deferred()
+    context.answers['status'] = () => slow.promise
+    store = new WorkbenchStore(context.asContext())
+
+    const first = store.refreshStatus()
+    context.answers['status'] = () => ({
+      ok: true,
+      value: {
+        data_dir: '/tmp/dealbuddy',
+        intake_url: 'http://127.0.0.1:8899/api/current/offers',
+        listening: true,
+      },
+    })
+    await store.refreshStatus()
+
+    // The first probe answers last, with the address the Host used to have.
+    slow.settle({
+      ok: true,
+      value: {
+        data_dir: '/tmp/dealbuddy',
+        intake_url: 'http://127.0.0.1:8766/api/current/offers',
+        listening: false,
+      },
+    })
+    await first
+
+    expect(store.getSnapshot().status?.intake_url).toBe('http://127.0.0.1:8899/api/current/offers')
   })
 })

@@ -8,7 +8,7 @@ import {
   offerToMarkdown,
   safeUrl,
 } from '../../src/client/workbench/format.js'
-import type { OfferView } from '../../src/client/workbench/types.js'
+import { offersOf, type OfferView } from '../../src/client/workbench/types.js'
 
 /**
  * The panel's field formatting against the Python workbench's.
@@ -132,5 +132,20 @@ describe('workbench formatting', () => {
     expect(safeUrl('javascript:alert(1)')).toBeUndefined()
     expect(safeUrl('not a url')).toBeUndefined()
     expect(safeUrl('')).toBeUndefined()
+  })
+
+  it('skips stored entries that are not offers', () => {
+    // A hand-edited or older session file can carry a null where an offer
+    // belongs; one of those reaching the list would blank the whole workbench.
+    const session = {
+      verified_offers: [null, FULL, '不是商品', ['也不是'], { title: '半条记录' }],
+    }
+
+    expect(offersOf(session).map((offer) => offer.title)).toEqual([
+      '示例牌 65 英寸电视',
+      '半条记录',
+    ])
+    expect(offersOf({ verified_offers: '不是数组' })).toEqual([])
+    expect(offersOf(null)).toEqual([])
   })
 })

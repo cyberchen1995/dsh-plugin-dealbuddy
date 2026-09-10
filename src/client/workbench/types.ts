@@ -60,11 +60,20 @@ export interface WorkbenchStatusView {
 }
 
 /**
- * Read a session's offers.
+ * Read a session's offers, skipping anything that is not one.
+ *
+ * The Host hands the stored document through as it found it, so a hand-edited
+ * or older file can carry a null or a scalar where an offer belongs. The Host's
+ * own helpers skip those nodes; the panel has to as well, or one bad entry
+ * takes the whole workbench down while the list is being rendered.
  * @param session - the session view, or null.
  * @returns the offers, or an empty list.
  */
 export function offersOf(session: SessionView | null): OfferView[] {
   const offers = session?.verified_offers
-  return Array.isArray(offers) ? (offers as OfferView[]) : []
+  if (!Array.isArray(offers)) return []
+  return offers.filter(
+    (offer): offer is OfferView =>
+      typeof offer === 'object' && offer !== null && !Array.isArray(offer),
+  )
 }
