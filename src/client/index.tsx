@@ -88,6 +88,11 @@ export function apply(ctx: unknown): void {
     }
     publish()
     const offSessions = sessions?.list.subscribe(publish)
+    // Read once at startup so a conversation that already has a shopping
+    // session shows its badge straight away. Without this the bindings arrive
+    // only when the drawer is first opened, which is the one thing the badge
+    // is supposed to save you from doing.
+    void store.refresh({ silent: true })
     return () => {
       offSessions?.()
       off()

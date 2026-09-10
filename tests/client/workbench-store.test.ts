@@ -597,4 +597,56 @@ describe('workbench store', () => {
     expect(store.getSnapshot().session).toBeNull()
     expect(store.getSnapshot().boundSessionId).toBeNull()
   })
+
+  it('binds to the conversation the confirmation was opened for', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', []), null)
+    context.answers['listSessions'] = () => ({
+      ok: true,
+      value: {
+        current_session_id: 'aaaaaaaaaaaa',
+        data_dir: '/tmp/dealbuddy',
+        bindings: [{ session_id: 'aaaaaaaaaaaa', dsh_session_id: 'conv-2', bound_at: 't' }],
+        sessions: [
+          { session_id: 'aaaaaaaaaaaa', category: '电视', raw_request: '', version: 1, phase: 'created', verified_count: 0, report_available: false, created_at: '1', updated_at: '1' },
+        ],
+      },
+    })
+    store = newStore(context)
+    store.setConversation(
+      { id: CONVERSATION, title: '对话' },
+      { [CONVERSATION]: '对话', 'conv-2': '另一段对话', 'conv-3': '第三段' },
+    )
+    await store.refresh()
+    await store.bind('aaaaaaaaaaaa')
+    expect(store.getSnapshot().pendingRebind).not.toBeNull()
+
+    // The drawer is not modal, so the conversation behind it can move while
+    // the dialog is up.
+    store.setConversation({ id: 'conv-3', title: '第三段' }, { 'conv-3': '第三段' })
+    await store.resolveRebind(true)
+
+    expect(context.calls.find((call) => call.method === 'bind')?.args).toEqual({
+      sessionId: 'aaaaaaaaaaaa',
+      dshSessionId: CONVERSATION,
+    })
+  })
+
+  it('stays bound when the session file cannot be read', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = newStore(context)
+    await store.refresh()
+
+    context.answers['showSession'] = () => ({
+      ok: false,
+      error: { code: 'dealbuddy/session-not-found', message: 'gone' },
+    })
+    await store.refresh({ silent: true })
+
+    // Reporting it as unbound would hide the reason and offer a bind action
+    // for a row that is already bound.
+    expect(store.getSnapshot().boundSessionId).toBe('aaaaaaaaaaaa')
+    expect(store.getSnapshot().session).toBeNull()
+  })
 })

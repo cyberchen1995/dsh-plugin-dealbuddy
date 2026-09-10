@@ -71,10 +71,12 @@ export function registerBindingContext(
  *
  * Context text is interpolated for `{{name}}` groups, and this block carries a
  * user's own words — a request that happens to contain braces would otherwise
- * fail the whole assembly.
+ * fail the whole assembly. Whole runs are broken up rather than the first pair
+ * in each: replacing pairs left to right leaves `{{{name}}}` as `{ {{name}}}`,
+ * which is still an interpolation group.
  * @param text - the rendered block.
  * @returns the same text with no interpolation group left in it.
  */
 function escapeVariables(text: string): string {
-  return text.replaceAll('{{', '{ {')
+  return text.replaceAll(/\{{2,}/g, (run) => [...run].join(' '))
 }

@@ -98,4 +98,34 @@ describe('binding store', () => {
     await store.bind('aaaaaaaaaaaa', 'conv-1')
     expect(store.cached()).toHaveLength(1)
   })
+
+  it('does not let a read started earlier undo a write', async () => {
+    // The constructor fires an unawaited warm-up read, so this overlap is the
+    // common case at startup rather than a corner one.
+    const warming = store.list()
+    await store.bind('aaaaaaaaaaaa', 'conv-1')
+    await warming
+
+    expect(store.cached()).toHaveLength(1)
+    expect(await store.byConversation('conv-1')).toBeDefined()
+  })
+
+  it('keeps one write inside one data directory', async () => {
+    await store.bind('aaaaaaaaaaaa', 'conv-1')
+    const moved = await mkdtemp(join(tmpdir(), 'dealbuddy-bindings-moved-'))
+    const other = new BindingStore(moved)
+    await other.bind('bbbbbbbbbbbb', 'conv-2')
+
+    // Point the first store at the second directory, then write.
+    store.useDataDir(moved)
+    await store.bind('cccccccccccc', 'conv-3')
+
+    // The second directory's own binding must still be there: a write that
+    // read the old directory and wrote the new one would have erased it.
+    const reread = await new BindingStore(moved).list()
+    expect(reread.map((entry) => entry.session_id).sort()).toEqual([
+      'bbbbbbbbbbbb',
+      'cccccccccccc',
+    ])
+  })
 })

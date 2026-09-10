@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { registerBindingContext } from '../../src/context.js'
 import { buildEvaluationMessage, renderBindingContext } from '../../src/services/binding-text.js'
 import { readBoundContext, type BoundContext } from '../../src/services/bindings.js'
 import { createSession, setCurrentSession } from '../../src/services/sessions.js'
@@ -161,5 +162,46 @@ describe('evaluation request', () => {
     expect(buildEvaluationMessage('x', { ...FULL, category: '' }).summary).toBe(
       '未填品类选品报告 · 评估请求',
     )
+  })
+
+  it('leaves no interpolation group in a request full of braces', async () => {
+    const created = await createSession(sessions, '电视', '要 {{name}} 和 {{{deep}}} 这种')
+    await bindings.bind(created.current_session_id, 'conv-1')
+    let provider: ((assemble: { agent?: { id: string } }) => string) | undefined
+    const ctx = {
+      systemPrompt: {
+        context(contribution: {
+          text: (assemble: { agent?: { id: string } }) => string
+        }): () => void {
+          provider = contribution.text
+          return () => undefined
+        },
+      },
+    }
+    registerBindingContext(ctx as never, sessions, bindings)
+
+    const text = provider?.({ agent: { id: 'conv-1' } }) ?? ''
+
+    // The assembly interpolates `{{name}}` groups and rejects malformed ones,
+    // so a user's own braces must not survive into it in any run length.
+    expect(text).toContain('要')
+    expect(text).not.toContain('{{')
+  })
+
+  it('says nothing for a conversation the provider was not asked about', async () => {
+    let provider: ((assemble: { agent?: { id: string } }) => string) | undefined
+    const ctx = {
+      systemPrompt: {
+        context(contribution: {
+          text: (assemble: { agent?: { id: string } }) => string
+        }): () => void {
+          provider = contribution.text
+          return () => undefined
+        },
+      },
+    }
+    registerBindingContext(ctx as never, sessions, bindings)
+
+    expect(provider?.({})).toBe('')
   })
 })

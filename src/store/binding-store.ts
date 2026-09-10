@@ -63,9 +63,17 @@ export class BindingStore {
    */
   async list(): Promise<Binding[]> {
     if (this.#cache !== undefined) return this.#cache
-    const parsed = await this.#read()
-    this.#cache = parsed
-    return parsed
+    // Filled under the write lock: an unlocked read started before a bind can
+    // otherwise finish after it and put the pre-write table back, which loses
+    // a binding made moments after startup — the constructor's warm-up read
+    // makes exactly that overlap the common case.
+    return this.#mutex.run(BINDINGS_FILENAME, async () => {
+      if (this.#cache !== undefined) return this.#cache
+      const dataDir = this.#dataDir
+      const parsed = await this.#read(dataDir)
+      if (dataDir === this.#dataDir) this.#cache = parsed
+      return parsed
+    })
   }
 
   /**
@@ -153,15 +161,19 @@ export class BindingStore {
    */
   async #write<T>(mutate: (entries: Binding[]) => { next: Binding[]; result: T }): Promise<T> {
     return this.#mutex.run(BINDINGS_FILENAME, async () => {
-      const entries = await this.#read()
+      // One directory for the whole operation. Reading the old directory and
+      // writing the new one would merge two unrelated tables and overwrite
+      // whatever the new directory already held.
+      const dataDir = this.#dataDir
+      const entries = await this.#read(dataDir)
       const { next, result } = mutate(entries)
-      const path = join(this.#dataDir, BINDINGS_FILENAME)
+      const path = join(dataDir, BINDINGS_FILENAME)
       const body = `${JSON.stringify({ version: FORMAT_VERSION, bindings: next }, null, 2)}\n`
       await mkdir(dirname(path), { recursive: true })
       const temporary = `${path}.tmp`
       await writeFile(temporary, body, 'utf8')
       await rename(temporary, path)
-      this.#cache = next
+      if (dataDir === this.#dataDir) this.#cache = next
       return result
     })
   }
@@ -171,12 +183,13 @@ export class BindingStore {
    *
    * A binding is a convenience, not data anyone typed: refusing to load the
    * plugin because this file was hand-edited would be the wrong trade.
+   * @param dataDir - the directory this operation belongs to.
    * @returns the bindings on disk.
    */
-  async #read(): Promise<Binding[]> {
+  async #read(dataDir: string): Promise<Binding[]> {
     let raw: string
     try {
-      raw = await readFile(join(this.#dataDir, BINDINGS_FILENAME), 'utf8')
+      raw = await readFile(join(dataDir, BINDINGS_FILENAME), 'utf8')
     } catch {
       return []
     }

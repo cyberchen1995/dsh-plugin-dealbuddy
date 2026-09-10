@@ -52,6 +52,14 @@ export interface PendingRebind {
   category: string
   /** The conversation that holds it today. */
   fromTitle: string
+  /**
+   * The conversation the dialog was opened for.
+   *
+   * The drawer is not modal, so the conversation behind it can be switched
+   * while the dialog is up; reading the selection at confirmation time would
+   * bind the session to whatever is current by then.
+   */
+  toConversationId: string
 }
 
 /** Everything the panel renders from. */
@@ -383,7 +391,9 @@ export class WorkbenchStore {
         error instanceof RpcFailure &&
         error.code === 'dealbuddy/session-not-found'
       ) {
-        this.#set({ session: null, boundSessionId: null })
+        // Still bound, just unreadable. Reporting it as unbound would hide the
+        // reason and offer a bind action for a row that is already bound.
+        this.#set({ session: null })
       } else if (reached && this.#state.session !== null) {
         // The pointer moved but its document would not read (unreadable or
         // malformed file). Keeping the old pair would leave the panel claiming
@@ -443,21 +453,23 @@ export class WorkbenchStore {
    * A session that already belongs to another conversation asks first: moving
    * it silently would leave that conversation talking about nothing.
    * @param sessionId - the shopping session.
-   * @param force - skip the confirmation, because it was just answered.
+   * @param target - the conversation the confirmation was opened for; when
+   *   given, the confirmation has already been answered.
    * @returns settlement once the panel reflects the binding.
    */
-  async bind(sessionId: string, force = false): Promise<void> {
-    const conversation = this.#state.conversation
-    if (conversation === null) return
+  async bind(sessionId: string, target?: string): Promise<void> {
+    const conversation = target ?? this.#state.conversation?.id
+    if (conversation === undefined) return
     const held = this.#state.bindings.find((entry) => entry.session_id === sessionId)
-    if (held !== undefined && held.dsh_session_id === conversation.id) return
-    if (held !== undefined && !force) {
+    if (held !== undefined && held.dsh_session_id === conversation) return
+    if (held !== undefined && target === undefined) {
       const summary = this.#state.sessions.find((entry) => entry.session_id === sessionId)
       this.#set({
         pendingRebind: {
           session_id: sessionId,
           category: summary?.category ?? '',
           fromTitle: this.#state.conversations[held.dsh_session_id] ?? held.dsh_session_id,
+          toConversationId: conversation,
         },
       })
       this.#retimer()
@@ -465,7 +477,7 @@ export class WorkbenchStore {
     }
     const rebinding = held !== undefined
     await this.#write(async () => {
-      await callWorkbench(this.ctx, 'bind', { sessionId, dshSessionId: conversation.id })
+      await callWorkbench(this.ctx, 'bind', { sessionId, dshSessionId: conversation })
       this.#notice(rebinding ? '已换绑到本对话' : '已绑定到本对话')
     })
   }
@@ -480,7 +492,7 @@ export class WorkbenchStore {
     this.#set({ pendingRebind: null })
     this.#retimer()
     if (pending === null || !confirmed) return
-    await this.bind(pending.session_id, true)
+    await this.bind(pending.session_id, pending.toConversationId)
   }
 
   /**
