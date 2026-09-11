@@ -50,11 +50,18 @@ describe('bound-context reading', () => {
     expect(renderBindingContext(undefined)).toBe('')
   })
 
-  it('says nothing before the table has been read', () => {
-    // The provider answers synchronously; an unread table must not look like
-    // a table with no rows, or a bound conversation would silently lose its
-    // context until something else warmed the cache.
-    expect(readBoundContext(sessions, bindings, 'conv-1')).toBeUndefined()
+  it('reads a binding written before this process started, without awaiting', async () => {
+    const created = await createSession(sessions, '电视', '预算5000以内')
+    await bindings.bind(created.current_session_id, 'conv-1')
+
+    // A fresh store over the same directory, as a restart would build — the
+    // provider must answer from it on the very first model request, with no
+    // await anywhere in between.
+    const restarted = new BindingStore(sessions.dataDir)
+    const bound = readBoundContext(sessions, restarted, 'conv-1')
+
+    expect(bound).toBeDefined()
+    expect((bound as BoundContext).category).toBe('电视')
   })
 
   it('reads the bound session off the disk', async () => {

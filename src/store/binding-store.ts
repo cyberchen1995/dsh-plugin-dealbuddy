@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
@@ -46,6 +47,7 @@ export class BindingStore {
    */
   constructor(dataDir: string) {
     this.#dataDir = dataDir
+    this.primeSync()
   }
 
   /**
@@ -55,6 +57,28 @@ export class BindingStore {
   useDataDir(dataDir: string): void {
     this.#dataDir = dataDir
     this.#cache = undefined
+    this.primeSync()
+  }
+
+  /**
+   * Fill the table from disk without waiting.
+   *
+   * The prompt provider answers synchronously and runs on the very first model
+   * request, which can arrive before an awaited read would have settled — and
+   * an unfilled table looks exactly like "this conversation has no shopping
+   * session", so the first answer would silently lose its context. The file is
+   * one small JSON object, so reading it on the spot costs less than the race.
+   */
+  primeSync(): void {
+    if (this.#cache !== undefined) return
+    const dataDir = this.#dataDir
+    try {
+      this.#cache = parseBindings(readFileSync(join(dataDir, BINDINGS_FILENAME), 'utf8'))
+    } catch {
+      // No file yet, or one nobody can parse: an empty table is the truth
+      // either way, and `list()` will read again if this was a transient miss.
+      this.#cache = []
+    }
   }
 
   /**
@@ -193,15 +217,24 @@ export class BindingStore {
     } catch {
       return []
     }
-    try {
-      const parsed: unknown = JSON.parse(raw)
-      if (parsed === null || typeof parsed !== 'object') return []
-      const list = (parsed as { bindings?: unknown }).bindings
-      if (!Array.isArray(list)) return []
-      return list.filter(isBinding)
-    } catch {
-      return []
-    }
+    return parseBindings(raw)
+  }
+}
+
+/**
+ * Parse the file's contents, treating anything unreadable as an empty table.
+ * @param raw - the file's text.
+ * @returns the bindings it names.
+ */
+function parseBindings(raw: string): Binding[] {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed === null || typeof parsed !== 'object') return []
+    const list = (parsed as { bindings?: unknown }).bindings
+    if (!Array.isArray(list)) return []
+    return list.filter(isBinding)
+  } catch {
+    return []
   }
 }
 

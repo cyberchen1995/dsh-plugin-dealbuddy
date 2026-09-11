@@ -632,6 +632,23 @@ describe('workbench store', () => {
     })
   })
 
+  it('names the unreadable session on the very first refresh', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    context.answers['showSession'] = () => ({
+      ok: false,
+      error: { code: 'dealbuddy/session-not-found', message: 'gone' },
+    })
+    store = newStore(context)
+
+    // Straight after a reload nothing has ever been committed, so the bound id
+    // has to come from the list this refresh just read.
+    await store.refresh()
+
+    expect(store.getSnapshot().boundSessionId).toBe('aaaaaaaaaaaa')
+    expect(store.getSnapshot().session).toBeNull()
+  })
+
   it('stays bound when the session file cannot be read', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))

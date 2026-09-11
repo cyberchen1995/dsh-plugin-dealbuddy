@@ -91,6 +91,14 @@ export function WorkbenchDrawer(props: { store: WorkbenchStore }): JSX.Element |
         <span className="db-wb-head-status">
           <span>{boundLine}</span>
           <span>{targetLine}</span>
+          {state.status === null ? null : (
+            <span className="db-wb-head-intake">
+              {/* Without this line there is no way to tell from the panel why
+                  captures are not arriving. */}
+              <span>{state.status.listening ? '投递地址' : '未监听'}</span>
+              <code>{state.status.intake_url}</code>
+            </span>
+          )}
         </span>
         <span className="db-wb-spacer" />
         {state.loading ? <span className="db-wb-hint">同步中…</span> : null}

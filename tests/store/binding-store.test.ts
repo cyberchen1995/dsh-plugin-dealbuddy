@@ -90,13 +90,19 @@ describe('binding store', () => {
     expect(await new BindingStore(dataDir).list()).toEqual([])
   })
 
-  it('holds the table in memory for the prompt provider', async () => {
-    expect(store.cached()).toBeUndefined()
-    await store.list()
-    expect(store.cached()).toEqual([])
-
+  it('has its table in memory from the moment it is constructed', async () => {
     await store.bind('aaaaaaaaaaaa', 'conv-1')
-    expect(store.cached()).toHaveLength(1)
+
+    // The prompt provider answers synchronously and the first model request
+    // can arrive before any awaited read would have settled; an unfilled table
+    // looks exactly like "nothing is bound here".
+    const fresh = new BindingStore(dataDir)
+    expect(fresh.cached()).toHaveLength(1)
+    expect(fresh.cached()?.[0]?.dsh_session_id).toBe('conv-1')
+  })
+
+  it('has an empty table in memory when there is no file', () => {
+    expect(new BindingStore(dataDir).cached()).toEqual([])
   })
 
   it('does not let a read started earlier undo a write', async () => {

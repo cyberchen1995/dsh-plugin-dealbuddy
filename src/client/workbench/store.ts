@@ -330,6 +330,10 @@ export class WorkbenchStore {
     if (!options.silent) this.#set({ loading: true })
     this.#refreshing = true
     let reached = false
+    // The binding the list just reported, so a failing document read can still
+    // say WHICH session it failed on — on the first refresh after a reload the
+    // state does not know yet.
+    let listedBound: string | null | undefined
     try {
       const listed = await callWorkbench<{
         current_session_id: string | null
@@ -350,6 +354,7 @@ export class WorkbenchStore {
         conversationId === undefined
           ? null
           : (bindings.find((entry) => entry.dsh_session_id === conversationId)?.session_id ?? null)
+      listedBound = boundSessionId
       if (boundSessionId === null) {
         this.#set({
           sessions,
@@ -392,8 +397,10 @@ export class WorkbenchStore {
         error.code === 'dealbuddy/session-not-found'
       ) {
         // Still bound, just unreadable. Reporting it as unbound would hide the
-        // reason and offer a bind action for a row that is already bound.
-        this.#set({ session: null })
+        // reason and offer a bind action for a row that is already bound — and
+        // on the first refresh after a reload the state has no bound id yet,
+        // so it comes from the list rather than from what is on screen.
+        this.#set({ boundSessionId: listedBound ?? this.#state.boundSessionId, session: null })
       } else if (reached && this.#state.session !== null) {
         // The pointer moved but its document would not read (unreadable or
         // malformed file). Keeping the old pair would leave the panel claiming

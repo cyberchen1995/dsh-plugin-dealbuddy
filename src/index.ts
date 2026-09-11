@@ -142,10 +142,10 @@ class PluginRuntime {
       legacyOffersRoute: config.legacyOffersRoute,
     }
     this.store = new SessionStore(resolveDataDir(this.settings.dataDir))
+    // The store fills its table synchronously on construction: the prompt
+    // provider answers synchronously and the first model request can arrive
+    // before an awaited read would have settled.
     this.bindings = new BindingStore(resolveDataDir(this.settings.dataDir))
-    // Warm the table once: the prompt provider has to answer synchronously,
-    // and an unread table would make every conversation look unbound.
-    void this.bindings.list().catch(() => undefined)
   }
 
   /**
@@ -208,7 +208,6 @@ class PluginRuntime {
     if (dataDirMoved) {
       this.store.useDataDir(resolveDataDir(next.dataDir))
       this.bindings.useDataDir(resolveDataDir(next.dataDir))
-      void this.bindings.list().catch(() => undefined)
     }
     if (!listenerMoved) return
     await this.stop()
