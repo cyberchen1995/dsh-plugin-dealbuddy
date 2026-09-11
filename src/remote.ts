@@ -242,14 +242,14 @@ export class DealbuddyRemote extends TypertRemoteService {
    * @param category - the product category.
    * @param request - the user's request in their own words; may be omitted.
    * @param dshSessionId - the conversation to bind it to; may be omitted.
-   * @returns the new session's id.
+   * @returns the new session's id, and whether it ended up bound.
    */
   @Remote
   async createSession(
     category: string,
     request?: string,
     dshSessionId?: string,
-  ): Promise<{ session_id: string }> {
+  ): Promise<{ session_id: string; bound: boolean }> {
     // Validated on the trimmed value but stored as sent: the tool face does
     // not trim either, and the two faces have to write the same file.
     if (typeof category !== 'string' || category.trim() === '') {
@@ -262,10 +262,20 @@ export class DealbuddyRemote extends TypertRemoteService {
       throw new RemoteError('gateway/bad-request', 'dshSessionId must be a string', {})
     }
     const created = await createSession(this.store, category, request ?? '')
-    if (dshSessionId !== undefined && dshSessionId.trim() !== '') {
-      await this.bindings.bind(created.current_session_id, dshSessionId)
+    if (dshSessionId === undefined || dshSessionId.trim() === '') {
+      return { session_id: created.current_session_id, bound: false }
     }
-    return { session_id: created.current_session_id }
+    try {
+      await this.bindings.bind(created.current_session_id, dshSessionId)
+    } catch {
+      // The session is already on disk and is already the capture target.
+      // Failing the whole call would hide that and send the user back to a
+      // form they would submit again, so the half that worked is reported
+      // rather than rolled back — undoing a creation is the more destructive
+      // of the two answers.
+      return { session_id: created.current_session_id, bound: false }
+    }
+    return { session_id: created.current_session_id, bound: true }
   }
 
   /**

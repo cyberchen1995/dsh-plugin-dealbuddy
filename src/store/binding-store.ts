@@ -74,10 +74,13 @@ export class BindingStore {
     const dataDir = this.#dataDir
     try {
       this.#cache = parseBindings(readFileSync(join(dataDir, BINDINGS_FILENAME), 'utf8'))
-    } catch {
-      // No file yet, or one nobody can parse: an empty table is the truth
-      // either way, and `list()` will read again if this was a transient miss.
-      this.#cache = []
+    } catch (error) {
+      // No file is the ordinary case — nobody has bound anything yet — and an
+      // empty table is the truth. Any other reason (the directory is not there
+      // yet, a permission problem) is worth a retry, so the cache is left
+      // unfilled for `list()` to read again rather than answering "nothing is
+      // bound" for the lifetime of the plugin.
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') this.#cache = []
     }
   }
 

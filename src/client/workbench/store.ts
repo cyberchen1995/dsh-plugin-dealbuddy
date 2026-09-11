@@ -168,9 +168,16 @@ export class WorkbenchStore {
     const changed = conversation?.id !== this.#state.conversation?.id
     this.#set({ conversation, conversations: titles })
     if (!changed) return
+    // A refresh already on the wire belongs to the conversation that is now
+    // gone; letting it land would commit that conversation's session under
+    // this one, and a delete could then target the wrong session.
+    this.#generation += 1
+    this.#refreshing = false
     // A different conversation means a different shopping session on screen.
     this.#set({ boundSessionId: null, session: null, openUrls: [] })
-    if (this.#state.open) void this.refresh({ silent: true })
+    // Re-read whether or not the drawer is open: the header badge renders from
+    // these lists too.
+    void this.refresh({ silent: true })
   }
 
   /**
@@ -396,22 +403,14 @@ export class WorkbenchStore {
       this.#set({ boundSessionId, loading: false, ...settled })
     } catch (error) {
       if (generation !== this.#generation) return
-      // A session whose file is gone must not keep rendering its products.
-      if (
-        reached &&
-        error instanceof RpcFailure &&
-        error.code === 'dealbuddy/session-not-found'
-      ) {
-        // Still bound, just unreadable. Reporting it as unbound would hide the
-        // reason and offer a bind action for a row that is already bound — and
-        // on the first refresh after a reload the state has no bound id yet,
-        // so it comes from the list rather than from what is on screen.
+      if (reached) {
+        // The list read got through, so which session this conversation is
+        // about is known even though its document would not load — whether it
+        // is gone, malformed, or unreadable. Reporting the conversation as
+        // unbound would hide the reason and offer a bind action for a row that
+        // is already bound; keeping the old document would claim products that
+        // are no longer what this conversation is about.
         this.#set({ boundSessionId: listedBound ?? this.#state.boundSessionId, session: null })
-      } else if (reached && this.#state.session !== null) {
-        // The pointer moved but its document would not read (unreadable or
-        // malformed file). Keeping the old pair would leave the panel claiming
-        // this conversation is about the session on screen, which is now false.
-        this.#set({ session: null })
       }
       if (options.silent) {
         // A failed poll retries on the next tick, exactly as the Python
@@ -437,24 +436,40 @@ export class WorkbenchStore {
     const request = this.#state.draftRequest
     if (category.trim() === '') return
     const conversation = this.#state.conversation
+    let unbound = false
     await this.#write(async () => {
       // One call: a session made from inside a conversation belongs to it, and
       // splitting that into create-then-bind would let the first half succeed
       // on its own — leaving an unbound session and a form the user submits
       // again, which is how duplicates appear.
-      await callWorkbench(this.ctx, 'createSession', {
-        category,
-        request,
-        ...(conversation === null ? {} : { dshSessionId: conversation.id }),
-      })
+      const created = await callWorkbench<{ session_id: string; bound: boolean }>(
+        this.ctx,
+        'createSession',
+        {
+          category,
+          request,
+          ...(conversation === null ? {} : { dshSessionId: conversation.id }),
+        },
+      )
+      // The session exists either way, so the form is cleared either way —
+      // leaving it filled is what makes a user submit it again and end up with
+      // two. Only the binding half is worth reporting when it did not happen,
+      // and that has to wait until after the re-read below, which clears the
+      // error line.
+      unbound = conversation !== null && !created.bound
       // Clear only what was actually submitted. The inputs stay live during
       // the call, so anything typed since belongs to the next session.
       this.#set({
         ...(this.#state.draftCategory === category ? { draftCategory: '' } : {}),
         ...(this.#state.draftRequest === request ? { draftRequest: '' } : {}),
       })
-      this.#notice('会话已创建，采集会投递到这里')
+      if (conversation === null || created.bound) {
+        this.#notice('会话已创建，采集会投递到这里')
+      }
     })
+    if (unbound) {
+      this.#set({ error: '会话已创建，但没能绑定到本对话。在列表里点「绑定到本对话」。' })
+    }
   }
 
   /**

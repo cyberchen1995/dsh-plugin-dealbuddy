@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -103,6 +103,16 @@ describe('binding store', () => {
 
   it('has an empty table in memory when there is no file', () => {
     expect(new BindingStore(dataDir).cached()).toEqual([])
+  })
+
+  it('leaves the table unfilled when the file cannot be read', async () => {
+    // A missing file is the ordinary first-run case and does mean "nothing is
+    // bound". Anything else does not: caching an empty table for it would
+    // answer "nothing is bound" for the lifetime of the plugin, even after the
+    // problem clears.
+    await mkdir(join(dataDir, BINDINGS_FILENAME))
+
+    expect(new BindingStore(dataDir).cached()).toBeUndefined()
   })
 
   it('does not let a read started earlier undo a write', async () => {

@@ -199,7 +199,10 @@ describe('workbench store', () => {
   it('names its arguments the way the Host declares its parameters', async () => {
     const context = new FakeContext()
     answerWith(context, 'aaaaaaaaaaaa', session('t1', []))
-    context.answers['createSession'] = () => ({ ok: true, value: { session_id: 'cccccccccccc' } })
+    context.answers['createSession'] = () => ({
+      ok: true,
+      value: { session_id: 'cccccccccccc', bound: true },
+    })
     store = newStore(context)
     store.setDraft('draftCategory', ' 电视 ')
     store.setDraft('draftRequest', '预算5000以内')
@@ -211,7 +214,7 @@ describe('workbench store', () => {
     // The value goes as typed: the tool face does not trim either, and both
     // faces have to write the same file. The binding rides along in the same
     // call, so a created session can never be left unbound.
-    expect(context.calls[0]).toEqual({
+    expect(context.calls.find((call) => call.method === 'createSession')).toEqual({
       method: 'createSession',
       args: { category: ' 电视 ', request: '预算5000以内', dshSessionId: CONVERSATION },
     })
@@ -463,7 +466,7 @@ describe('workbench store', () => {
     const creating = store.createSession()
     // The inputs stay live during the call, so this belongs to the next session.
     store.setDraft('draftCategory', '扫地机器人')
-    stalled.settle({ ok: true, value: { session_id: 'cccccccccccc' } })
+    stalled.settle({ ok: true, value: { session_id: 'cccccccccccc', bound: true } })
     await creating
 
     expect(store.getSnapshot().draftCategory).toBe('扫地机器人')
@@ -682,5 +685,62 @@ describe('workbench store', () => {
     expect(
       context.calls.filter((call) => call.method === 'listSessions').length,
     ).toBeGreaterThan(before)
+  })
+
+  it('names the bound session when its document is malformed, not just missing', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    context.answers['showSession'] = () => ({
+      ok: false,
+      error: { code: 'gateway/internal', message: 'malformed session file' },
+    })
+    store = newStore(context)
+
+    await store.refresh()
+
+    // The list read got through, so which session this conversation is about
+    // is known whatever stopped the document from loading.
+    expect(store.getSnapshot().boundSessionId).toBe('aaaaaaaaaaaa')
+    expect(store.getSnapshot().session).toBeNull()
+  })
+
+  it('drops a refresh belonging to the conversation that was just left', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a', 'b']))
+    store = newStore(context)
+    await store.refresh()
+
+    // A read for the old conversation is still on the wire when the user
+    // switches away.
+    const stalled = deferred()
+    context.answers['showSession'] = () => stalled.promise
+    const leaving = store.refresh({ silent: true })
+    store.setConversation({ id: 'conv-9', title: '另一段' }, { 'conv-9': '另一段' })
+    stalled.settle({ ok: true, value: session('t1', ['a', 'b']) })
+    await leaving
+
+    // Committing it would render the previous conversation's products here,
+    // and a delete could then target the wrong session.
+    expect(store.getSnapshot().boundSessionId).toBeNull()
+    expect(store.getSnapshot().session).toBeNull()
+  })
+
+  it('keeps the form cleared when the session was created but not bound', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', []))
+    context.answers['createSession'] = () => ({
+      ok: true,
+      value: { session_id: 'cccccccccccc', bound: false },
+    })
+    store = newStore(context)
+    store.setDraft('draftCategory', '扫地机器人')
+    store.setDraft('draftRequest', '预算3000以内')
+
+    await store.createSession()
+
+    // The session exists; leaving the form filled is what makes a user submit
+    // it again and end up with two.
+    expect(store.getSnapshot().draftCategory).toBe('')
+    expect(store.getSnapshot().error).toContain('没能绑定到本对话')
   })
 })
