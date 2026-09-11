@@ -182,4 +182,17 @@ describe('binding store', () => {
     // an empty table would persist one entry and erase the rest.
     await expect(blocked.bind('cccccccccccc', 'conv-3')).rejects.toThrow()
   })
+
+  it('refuses a write queued for a directory it has since left', async () => {
+    const moved = await mkdtemp(join(tmpdir(), 'dealbuddy-left-'))
+    const stale = dataDir
+    store.useDataDir(moved)
+
+    // The lock defers the write body, so the caller's directory check cannot
+    // be made at the call site — the expectation travels with the write.
+    await expect(store.bind('aaaaaaaaaaaa', 'conv-1', stale)).rejects.toThrow(
+      'data directory changed',
+    )
+    expect(await store.list()).toEqual([])
+  })
 })

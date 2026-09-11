@@ -155,9 +155,14 @@ export class BindingStore {
    * conversation that already holds another session replaces that one.
    * @param sessionId - the shopping session.
    * @param dshSessionId - the dsh conversation.
+   * @param expectDataDir - refuse if the store is no longer reading this
+   *   directory by the time the write runs. A caller that validated the
+   *   session somewhere else has to know the write landed in the same place,
+   *   and the lock defers this body, so the check belongs inside it rather
+   *   than at the call site.
    * @returns the binding that was written.
    */
-  async bind(sessionId: string, dshSessionId: string): Promise<Binding> {
+  async bind(sessionId: string, dshSessionId: string, expectDataDir?: string): Promise<Binding> {
     return this.#write((entries) => {
       const kept = entries.filter(
         (entry) => entry.session_id !== sessionId && entry.dsh_session_id !== dshSessionId,
@@ -168,7 +173,7 @@ export class BindingStore {
         bound_at: nowIso(),
       }
       return { next: [...kept, binding], result: binding }
-    })
+    }, expectDataDir)
   }
 
   /**
@@ -200,12 +205,20 @@ export class BindingStore {
    * @param mutate - receives the current table and returns the next one.
    * @returns whatever the mutator returned.
    */
-  async #write<T>(mutate: (entries: Binding[]) => { next: Binding[]; result: T }): Promise<T> {
+  async #write<T>(
+    mutate: (entries: Binding[]) => { next: Binding[]; result: T },
+    expectDataDir?: string,
+  ): Promise<T> {
     return this.#mutex.run(BINDINGS_FILENAME, async () => {
       // One directory for the whole operation. Reading the old directory and
       // writing the new one would merge two unrelated tables and overwrite
       // whatever the new directory already held.
       const dataDir = this.#dataDir
+      if (expectDataDir !== undefined && dataDir !== expectDataDir) {
+        throw new Error(
+          `the data directory changed while this write was queued (expected ${expectDataDir}, now ${dataDir})`,
+        )
+      }
       const entries = await this.#read(dataDir)
       const { next, result } = mutate(entries)
       const path = join(dataDir, BINDINGS_FILENAME)

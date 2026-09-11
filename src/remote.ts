@@ -63,6 +63,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'dealbuddy/offer-not-found': { readonly url: string }
     /** The conversation has no shopping session behind it. */
     'dealbuddy/not-bound': { readonly dshSessionId: string }
+    /** Someone else moved this shopping session since the caller last looked. */
+    'dealbuddy/binding-moved': { readonly sessionId: string; readonly owner: string }
     /** The bound session has nothing to evaluate yet. */
     'dealbuddy/no-report': { readonly sessionId: string }
   }
@@ -143,12 +145,23 @@ export class DealbuddyRemote extends TypertRemoteService {
    * about it.
    * @param sessionId - the shopping session.
    * @param dshSessionId - the conversation it belongs to.
+   * @param expectedOwner - the conversation the caller believes owns it today,
+   *   or the empty string for "nobody". A mismatch is refused: another browser
+   *   tab may have moved it since, and displacing a conversation the user was
+   *   never shown is not theirs to confirm.
    * @returns the binding that was written.
    */
   @Remote
-  async bind(sessionId: string, dshSessionId: string): Promise<{ binding: Binding }> {
+  async bind(
+    sessionId: string,
+    dshSessionId: string,
+    expectedOwner?: string,
+  ): Promise<{ binding: Binding }> {
     this.assertSessionId(sessionId)
     this.assertConversationId(dshSessionId)
+    if (expectedOwner !== undefined && typeof expectedOwner !== 'string') {
+      throw new RemoteError('gateway/bad-request', 'expectedOwner must be a string', {})
+    }
     const dataDir = this.store.dataDir
     const session = await this.store.load(sessionId)
     if (session === undefined) {
@@ -157,7 +170,17 @@ export class DealbuddyRemote extends TypertRemoteService {
       })
     }
     this.assertSameDataDir(dataDir)
-    return { binding: await this.bindings.bind(sessionId, dshSessionId) }
+    if (expectedOwner !== undefined) {
+      const owner = (await this.bindings.bySession(sessionId))?.dsh_session_id ?? ''
+      if (owner !== expectedOwner) {
+        throw new RemoteError(
+          'dealbuddy/binding-moved',
+          'this shopping session belongs to a different conversation now',
+          { sessionId, owner },
+        )
+      }
+    }
+    return { binding: await this.bindings.bind(sessionId, dshSessionId, dataDir) }
   }
 
   /**
@@ -274,7 +297,7 @@ export class DealbuddyRemote extends TypertRemoteService {
       return { session_id: created.current_session_id, bound: false }
     }
     try {
-      await this.bindings.bind(created.current_session_id, dshSessionId)
+      await this.bindings.bind(created.current_session_id, dshSessionId, dataDir)
     } catch {
       // The session is already on disk and is already the capture target.
       // Failing the whole call would hide that and send the user back to a

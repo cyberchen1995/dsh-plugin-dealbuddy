@@ -1,4 +1,5 @@
 import type { BindingStore } from '../store/binding-store.js'
+import type { SessionStore } from '../store/session-store.js'
 import type { JsonObject, JsonValue } from '../store/json.js'
 import { getString } from '../store/json.js'
 
@@ -115,19 +116,34 @@ export interface ExecLike {
  * @param sessionId - the argument, when the caller gave one.
  * @param exec - the run context, which names the conversation.
  * @param bindings - the binding table.
+ * @param store - the session store the caller will act on.
  * @returns the session id to act on.
- * @throws when neither the argument nor a binding names one.
+ * @throws when neither the argument nor a binding names one, or when the data
+ *   directory moved while the binding was being read.
  */
 export async function resolveSessionId(
   sessionId: string | undefined,
   exec: ExecLike,
   bindings: BindingStore,
+  store: SessionStore,
 ): Promise<string> {
   if (typeof sessionId === 'string' && sessionId !== '') return sessionId
   const agentId = exec.agent?.id
   if (agentId !== undefined) {
+    const dataDir = store.dataDir
     const binding = await bindings.byConversation(agentId)
-    if (binding !== undefined) return binding.session_id
+    if (binding !== undefined) {
+      // The binding names a session in the directory it was read from. Acting
+      // on it after the setting moved would address a different directory, and
+      // a restored or copied data set can hold the same id — which is how a
+      // destructive refinement would land on the wrong session.
+      if (store.dataDir !== dataDir || bindings.dataDir !== dataDir) {
+        throw new Error(
+          'The data directory changed while resolving this conversation\'s shopping session. Try again.',
+        )
+      }
+      return binding.session_id
+    }
   }
   throw new Error(
     'No shopping session is bound to this conversation. Pass session_id explicitly, or ask the user to bind one in the DealBuddy drawer.',

@@ -84,7 +84,7 @@ export function showSessionTool(
         : { card: 'generic', title: `DealBuddy 会话 ${metaSessionId(result.meta)}` },
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const sessionId = await resolveSessionId(args.session_id, exec, bindings)
+      const sessionId = await resolveSessionId(args.session_id, exec, bindings, store)
       return showSession(store, sessionId, {
         includeOcrText: args.include_ocr_text === true,
         includeMessages: args.include_messages === true,

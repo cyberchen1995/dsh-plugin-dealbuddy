@@ -137,6 +137,8 @@ export class WorkbenchStore {
   #refreshing = false
   /** Bumped by every status probe; an older answer is dropped. */
   #statusGeneration = 0
+  /** Whether the last failed write was a refused rebind, which reads differently. */
+  #lastFailureWasMove = false
   /** Set by dispose(); nothing may arm a timer after it. */
   #disposed = false
   /** Identity of the session list currently in state, so an unchanged list keeps its array. */
@@ -501,10 +503,26 @@ export class WorkbenchStore {
       return
     }
     const rebinding = held !== undefined
-    await this.#write(async () => {
-      await callWorkbench(this.ctx, 'bind', { sessionId, dshSessionId: conversation })
-      this.#notice(rebinding ? '已换绑到本对话' : '已绑定到本对话')
-    })
+    // What this panel believes owns the session today. Another tab may have
+    // moved it since the last read, and displacing a conversation the user was
+    // never shown is not theirs to confirm — so the Host refuses a mismatch
+    // and the question gets asked again against what is true now.
+    const expectedOwner = held?.dsh_session_id ?? ''
+    try {
+      await this.#write(async () => {
+        await callWorkbench(this.ctx, 'bind', {
+          sessionId,
+          dshSessionId: conversation,
+          expectedOwner,
+        })
+        this.#notice(rebinding ? '已换绑到本对话' : '已绑定到本对话')
+      })
+    } finally {
+      if (this.#state.error !== null && this.#lastFailureWasMove) {
+        this.#lastFailureWasMove = false
+        this.#set({ error: '这个购物会话刚被别的对话绑定了，已经刷新，请再确认一次。' })
+      }
+    }
   }
 
   /**
@@ -605,6 +623,8 @@ export class WorkbenchStore {
       await write()
       await this.refresh()
     } catch (error) {
+      this.#lastFailureWasMove =
+        error instanceof RpcFailure && error.code === 'dealbuddy/binding-moved'
       this.#set({ error: describeFailure(error) })
     } finally {
       this.#set({ busy: false })

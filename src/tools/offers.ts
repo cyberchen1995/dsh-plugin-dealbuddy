@@ -55,7 +55,7 @@ export function addOfferTool(store: SessionStore, bindings: BindingStore): ToolD
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderWrite(value) }] },
     async execute(args, exec) {
-      const sessionId = await resolveSessionId(args.session_id, exec, bindings)
+      const sessionId = await resolveSessionId(args.session_id, exec, bindings, store)
       const raw = args.offer as Record<string, unknown>
       const specs: StringMap = new Map()
       const rawSpecs = raw['specs']
@@ -106,7 +106,7 @@ export function removeOfferTool(store: SessionStore, bindings: BindingStore): To
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderWrite(value) }] },
     async execute(args, exec) {
-      return removeOfferByUrl(store, await resolveSessionId(args.session_id, exec, bindings), args.url)
+      return removeOfferByUrl(store, await resolveSessionId(args.session_id, exec, bindings, store), args.url)
     },
   })
 }
@@ -149,7 +149,7 @@ export function refineRequirementsTool(store: SessionStore, bindings: BindingSto
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderRefine(value) }] },
     async execute(args, exec) {
       const changes = toChangeMap(args.changes as Record<string, unknown>)
-      const sessionId = await resolveSessionId(args.session_id, exec, bindings)
+      const sessionId = await resolveSessionId(args.session_id, exec, bindings, store)
       return store.update(sessionId, (session) => {
         const before = offerNodes(session).length
         const outcome = refineSession(session, changes)
@@ -206,7 +206,7 @@ export function getReportTool(store: SessionStore, bindings: BindingStore): Tool
         : { card: 'generic', title: `DealBuddy 选品报告 · ${metaSessionId(result.meta)}` },
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      return getReport(store, await resolveSessionId(args.session_id, exec, bindings))
+      return getReport(store, await resolveSessionId(args.session_id, exec, bindings, store))
     },
   })
 }

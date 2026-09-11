@@ -106,4 +106,18 @@ describe('session_id fallback', () => {
     expect(metaSessionId({ session_id: '' })).toBe('(未知)')
     expect(resolvedSessionId(null)).toBe('')
   })
+
+  it('refuses the fallback when the data directory moved mid-lookup', async () => {
+    const created = await createSession(store, '电视', '')
+    await bindings.bind(created.current_session_id, 'conv-1')
+    const elsewhere = await mkdtemp(join(tmpdir(), 'dealbuddy-elsewhere-'))
+
+    // A restored or copied data set can hold the same session id, which is how
+    // a destructive refinement would otherwise land on the wrong session.
+    store.useDataDir(elsewhere)
+
+    await expect(run(getReportTool(store, bindings), {}, 'conv-1')).rejects.toThrow(
+      'data directory changed',
+    )
+  })
 })

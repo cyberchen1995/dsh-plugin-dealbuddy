@@ -562,9 +562,12 @@ describe('workbench store', () => {
     expect(context.calls.some((call) => call.method === 'bind')).toBe(false)
 
     await store.resolveRebind(true)
+    // The owner the panel was shown goes up with the write: the Host refuses
+    // if another tab moved the session since.
     expect(context.calls.find((call) => call.method === 'bind')?.args).toEqual({
       sessionId: 'aaaaaaaaaaaa',
       dshSessionId: CONVERSATION,
+      expectedOwner: 'conv-2',
     })
   })
 
@@ -629,6 +632,7 @@ describe('workbench store', () => {
     expect(context.calls.find((call) => call.method === 'bind')?.args).toEqual({
       sessionId: 'aaaaaaaaaaaa',
       dshSessionId: CONVERSATION,
+      expectedOwner: 'conv-2',
     })
   })
 
