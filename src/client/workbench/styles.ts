@@ -99,6 +99,33 @@ body[data-ds-dark-theme] [data-dealbuddy-workbench] {
 }
 .db-wb-textarea { min-height: 56px; resize: vertical; }
 .db-wb-sessions { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.db-wb-session-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: .5px solid transparent;
+}
+.db-wb-session-row[aria-current='true'] {
+  background: var(--dsw-specific-sidebar-nav-item-active, rgba(127, 127, 127, .18));
+  border-color: var(--dsw-alias-border-l2, currentColor);
+}
+.db-wb-session-row .db-wb-session { padding: 0; background: none; cursor: default; }
+.db-wb-session-row .db-wb-session:hover { background: none; }
+.db-wb-head-note { padding: 0 16px 8px; }
+.db-wb-head-status { flex-direction: column; align-items: flex-start; gap: 2px; }
+.db-wb-badge {
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: .5px solid var(--dsw-alias-border-l2, currentColor);
+  background: var(--db-price-bg);
+  color: var(--db-price-fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 .db-wb-session {
   width: 100%;
   text-align: start;
@@ -118,7 +145,7 @@ body[data-ds-dark-theme] [data-dealbuddy-workbench] {
   background: var(--dsw-specific-sidebar-nav-item-active, rgba(127, 127, 127, .18));
   border-color: var(--dsw-alias-border-l2, currentColor);
 }
-.db-wb-session-name { font-weight: 600; }
+.db-wb-session-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .db-wb-session-meta {
   display: flex;
   gap: 8px;

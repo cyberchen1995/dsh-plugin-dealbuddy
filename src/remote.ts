@@ -1,19 +1,37 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 
+import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
+
 import type { SessionSummary } from './core/models.js'
+import { buildEvaluationMessage } from './services/binding-text.js'
+import { readBoundContext } from './services/bindings.js'
 import {
   OfferNotFoundError,
   createSession,
+  getReport,
   listSessions,
   removeOfferByUrl,
   setCurrentSession,
   showSession,
 } from './services/sessions.js'
 import { probeIntakeListener } from './services/status.js'
+import { BindingMovedError, type Binding, type BindingStore } from './store/binding-store.js'
 import { isValidSessionId } from './store/paths.js'
 import { SessionNotFoundError, type SessionStore } from './store/session-store.js'
 import type { PlainJson } from './tools/shared.js'
+
+/**
+ * The part of a live conversation this plugin uses.
+ *
+ * Declared rather than imported from `@deepseek-ai/dsh-agent`: the Gateway
+ * resolves a parameter named `agent` into one of these, and this is every
+ * member the evaluate action touches.
+ */
+interface AgentLike {
+  readonly id: string
+  followup(message: ReturnType<typeof createUserMessage>): void
+}
 
 /**
  * Host half of the workbench panel: the same session operations the tools
@@ -43,6 +61,12 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'dealbuddy/session-not-found': { readonly sessionId: string }
     /** No captured product in that session carries the given URL. */
     'dealbuddy/offer-not-found': { readonly url: string }
+    /** The conversation has no shopping session behind it. */
+    'dealbuddy/not-bound': { readonly dshSessionId: string }
+    /** Someone else moved this shopping session since the caller last looked. */
+    'dealbuddy/binding-moved': { readonly sessionId: string; readonly owner: string }
+    /** The bound session has nothing to evaluate yet. */
+    'dealbuddy/no-report': { readonly sessionId: string }
   }
 }
 
@@ -58,11 +82,13 @@ export interface WorkbenchStatus {
   reason?: string
 }
 
-/** The session list plus the pointer captures land in. */
+/** The session list, the pointer captures land in, and who owns what. */
 export interface WorkbenchSessions {
   current_session_id: string | null
   data_dir: string
   sessions: SessionSummary[]
+  /** Which conversation each shopping session belongs to. */
+  bindings: Binding[]
 }
 
 /**
@@ -78,10 +104,11 @@ export interface WorkbenchSessions {
 export function registerRemote(
   ctx: Context,
   store: SessionStore,
+  bindings: BindingStore,
   port: () => number,
 ): void {
   // eslint-disable-next-line no-new -- a Service registers itself on construction.
-  new DealbuddyRemote(ctx, store, port)
+  new DealbuddyRemote(ctx, store, bindings, port)
 }
 
 /** The `dealbuddy` Remote namespace. */
@@ -94,6 +121,7 @@ export class DealbuddyRemote extends TypertRemoteService {
   constructor(
     ctx: Context,
     private readonly store: SessionStore,
+    private readonly bindings: BindingStore,
     private readonly port: () => number,
   ) {
     super(ctx, 'dealbuddyController', { namespace: 'dealbuddy' })
@@ -105,7 +133,113 @@ export class DealbuddyRemote extends TypertRemoteService {
    */
   @Remote
   async listSessions(): Promise<WorkbenchSessions> {
-    return listSessions(this.store)
+    const [listed, bindings] = await Promise.all([listSessions(this.store), this.bindings.list()])
+    return { ...listed, bindings }
+  }
+
+  /**
+   * Make a conversation and a shopping session the same thing.
+   *
+   * Neither parameter may be called `agent` or `session`: those names are
+   * Gateway lookups that would resume the conversation just to record a note
+   * about it.
+   * @param sessionId - the shopping session.
+   * @param dshSessionId - the conversation it belongs to.
+   * @param expectedOwner - the conversation the caller believes owns it today,
+   *   or the empty string for "nobody". A mismatch is refused: another browser
+   *   tab may have moved it since, and displacing a conversation the user was
+   *   never shown is not theirs to confirm.
+   * @returns the binding that was written.
+   */
+  @Remote
+  async bind(
+    sessionId: string,
+    dshSessionId: string,
+    expectedOwner?: string,
+  ): Promise<{ binding: Binding }> {
+    this.assertSessionId(sessionId)
+    this.assertConversationId(dshSessionId)
+    if (expectedOwner !== undefined && typeof expectedOwner !== 'string') {
+      throw new RemoteError('gateway/bad-request', 'expectedOwner must be a string', {})
+    }
+    const dataDir = this.store.dataDir
+    const session = await this.store.load(sessionId)
+    if (session === undefined) {
+      throw new RemoteError('dealbuddy/session-not-found', `Unknown session: ${sessionId}`, {
+        sessionId,
+      })
+    }
+    this.assertSameDataDir(dataDir)
+    try {
+      // Both expectations travel into the store's own lock: checking ownership
+      // out here would let two tabs pass the same check and then write one
+      // after the other, which is the race this is meant to stop.
+      const binding = await this.bindings.bind(sessionId, dshSessionId, {
+        expectDataDir: dataDir,
+        ...(expectedOwner === undefined ? {} : { expectedOwner }),
+      })
+      return { binding }
+    } catch (error) {
+      if (error instanceof BindingMovedError) {
+        throw new RemoteError(
+          'dealbuddy/binding-moved',
+          'this shopping session belongs to a different conversation now',
+          { sessionId, owner: error.owner },
+        )
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Forget whatever a conversation was about.
+   * @param dshSessionId - the conversation.
+   * @returns whether anything was removed.
+   */
+  @Remote
+  async unbind(dshSessionId: string): Promise<{ removed: boolean }> {
+    this.assertConversationId(dshSessionId)
+    return { removed: await this.bindings.unbindConversation(dshSessionId) }
+  }
+
+  /**
+   * Ask the model in this conversation to go through its report.
+   *
+   * The parameter is named `agent` on purpose: the Gateway turns it into the
+   * live conversation, resuming a cold one, which is exactly what sending it a
+   * message requires.
+   * @param agent - the conversation, resolved by the Gateway.
+   * @returns the session whose report was sent.
+   */
+  @Remote
+  async evaluateReport(agent: AgentLike): Promise<{ session_id: string }> {
+    const bound = readBoundContext(this.store, this.bindings, agent.id)
+    if (bound === undefined || 'missing' in bound) {
+      throw new RemoteError(
+        'dealbuddy/not-bound',
+        'this conversation has no shopping session behind it',
+        { dshSessionId: agent.id },
+      )
+    }
+    const report = await getReport(this.store, bound.session_id)
+    if (report.report === '') {
+      throw new RemoteError('dealbuddy/no-report', 'this session has no report yet', {
+        sessionId: bound.session_id,
+      })
+    }
+    const message = buildEvaluationMessage(report.report, bound)
+    agent.followup(
+      createUserMessage({
+        content: [{ type: 'text', text: message.text }],
+        source: {
+          kind: 'plugin',
+          plugin: 'dealbuddy',
+          form: 'notice',
+          summary: boundContextSummary(message.summary),
+        },
+      }),
+    )
+    return { session_id: bound.session_id }
   }
 
   /**
@@ -133,13 +267,22 @@ export class DealbuddyRemote extends TypertRemoteService {
   }
 
   /**
-   * Create a session and point captures at it.
+   * Create a session, point captures at it, and bind it to a conversation.
+   *
+   * One call rather than two: a create that succeeded followed by a bind that
+   * failed would leave an unbound session behind and a form the user is bound
+   * to submit again, which is how duplicate shopping sessions appear.
    * @param category - the product category.
    * @param request - the user's request in their own words; may be omitted.
-   * @returns the new session's id.
+   * @param dshSessionId - the conversation to bind it to; may be omitted.
+   * @returns the new session's id, and whether it ended up bound.
    */
   @Remote
-  async createSession(category: string, request?: string): Promise<{ session_id: string }> {
+  async createSession(
+    category: string,
+    request?: string,
+    dshSessionId?: string,
+  ): Promise<{ session_id: string; bound: boolean }> {
     // Validated on the trimmed value but stored as sent: the tool face does
     // not trim either, and the two faces have to write the same file.
     if (typeof category !== 'string' || category.trim() === '') {
@@ -148,8 +291,32 @@ export class DealbuddyRemote extends TypertRemoteService {
     if (request !== undefined && typeof request !== 'string') {
       throw new RemoteError('gateway/bad-request', 'request must be a string', {})
     }
+    if (dshSessionId !== undefined && typeof dshSessionId !== 'string') {
+      throw new RemoteError('gateway/bad-request', 'dshSessionId must be a string', {})
+    }
+    const dataDir = this.store.dataDir
     const created = await createSession(this.store, category, request ?? '')
-    return { session_id: created.current_session_id }
+    if (dshSessionId === undefined || dshSessionId.trim() === '') {
+      return { session_id: created.current_session_id, bound: false }
+    }
+    if (this.store.dataDir !== dataDir || this.bindings.dataDir !== dataDir) {
+      // The session went to the directory that was live when it was created;
+      // binding it in another one would name a file that is not there.
+      return { session_id: created.current_session_id, bound: false }
+    }
+    try {
+      await this.bindings.bind(created.current_session_id, dshSessionId, {
+        expectDataDir: dataDir,
+      })
+    } catch {
+      // The session is already on disk and is already the capture target.
+      // Failing the whole call would hide that and send the user back to a
+      // form they would submit again, so the half that worked is reported
+      // rather than rolled back — undoing a creation is the more destructive
+      // of the two answers.
+      return { session_id: created.current_session_id, bound: false }
+    }
+    return { session_id: created.current_session_id, bound: true }
   }
 
   /**
@@ -218,6 +385,36 @@ export class DealbuddyRemote extends TypertRemoteService {
   private assertSessionId(sessionId: string): void {
     if (typeof sessionId !== 'string' || !isValidSessionId(sessionId)) {
       throw new RemoteError('gateway/bad-request', 'session_id is not a session id', {})
+    }
+  }
+
+  /**
+   * Refuse when the data directory moved mid-call.
+   *
+   * The session is validated against one directory and the binding is written
+   * to another store; a settings change between the two would record a binding
+   * naming a session file that is not there. Refusing is the honest answer —
+   * the caller can simply ask again.
+   * @param dataDir - the directory the call started in.
+   * @throws RemoteError when either store has moved since.
+   */
+  private assertSameDataDir(dataDir: string): void {
+    if (this.store.dataDir === dataDir && this.bindings.dataDir === dataDir) return
+    throw new RemoteError(
+      'gateway/bad-request',
+      'the data directory changed while this call was running; try again',
+      {},
+    )
+  }
+
+  /**
+   * Reject a conversation id that could not be one.
+   * @param dshSessionId - the caller's id.
+   * @throws RemoteError when it is not a usable identity.
+   */
+  private assertConversationId(dshSessionId: string): void {
+    if (typeof dshSessionId !== 'string' || dshSessionId.trim() === '') {
+      throw new RemoteError('gateway/bad-request', 'dshSessionId is required', {})
     }
   }
 

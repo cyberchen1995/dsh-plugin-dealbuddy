@@ -1,6 +1,13 @@
-import type { ClientContextLike } from '../scope.js'
+import type { ClientContextLike, SessionsServiceLike } from '../scope.js'
 import { RpcFailure, callWorkbench, describeFailure } from './rpc.js'
-import { offersOf, type SessionSummaryView, type SessionView, type WorkbenchStatusView } from './types.js'
+import {
+  offersOf,
+  type BindingView,
+  type ConversationView,
+  type SessionSummaryView,
+  type SessionView,
+  type WorkbenchStatusView,
+} from './types.js'
 
 /**
  * The panel's state, outside React.
@@ -39,21 +46,47 @@ export interface PendingDelete {
   sessionId: string
 }
 
+/** A shopping session awaiting rebind confirmation. */
+export interface PendingRebind {
+  session_id: string
+  category: string
+  /** The conversation that holds it today. */
+  fromTitle: string
+  /**
+   * The conversation the dialog was opened for.
+   *
+   * The drawer is not modal, so the conversation behind it can be switched
+   * while the dialog is up; reading the selection at confirmation time would
+   * bind the session to whatever is current by then.
+   */
+  toConversationId: string
+}
+
 /** Everything the panel renders from. */
 export interface WorkbenchState {
   open: boolean
   loading: boolean
   busy: boolean
   sessions: SessionSummaryView[]
+  /** Where browser captures land. */
   currentId: string | null
+  /** The shopping session this conversation is bound to, if any. */
+  boundSessionId: string | null
+  /** The session document on screen: the one this conversation is bound to. */
   session: SessionView | null
   status: WorkbenchStatusView | null
   error: string | null
   notice: { seq: number; text: string } | null
   openUrls: readonly string[]
   pendingDelete: PendingDelete | null
+  pendingRebind: PendingRebind | null
   draftCategory: string
   draftRequest: string
+  /** The dsh conversation on screen, and every conversation by id. */
+  conversation: ConversationView | null
+  conversations: Readonly<Record<string, string>>
+  /** Which conversation each shopping session belongs to. */
+  bindings: readonly BindingView[]
 }
 
 const INITIAL: WorkbenchState = {
@@ -62,14 +95,19 @@ const INITIAL: WorkbenchState = {
   busy: false,
   sessions: [],
   currentId: null,
+  boundSessionId: null,
   session: null,
   status: null,
   error: null,
   notice: null,
   openUrls: [],
   pendingDelete: null,
+  pendingRebind: null,
   draftCategory: '',
   draftRequest: '',
+  conversation: null,
+  conversations: {},
+  bindings: [],
 }
 
 /**
@@ -99,15 +137,50 @@ export class WorkbenchStore {
   #refreshing = false
   /** Bumped by every status probe; an older answer is dropped. */
   #statusGeneration = 0
+  /** Whether the last failed write was a refused rebind, which reads differently. */
+  #lastFailureWasMove = false
   /** Set by dispose(); nothing may arm a timer after it. */
   #disposed = false
   /** Identity of the session list currently in state, so an unchanged list keeps its array. */
   #sessionsKey = ''
+  /** Same, for the binding table. */
+  #bindingsKey = ''
 
   /**
    * @param ctx - the browser plugin context, used for RPC.
+   * @param sessions - the harness's conversation service, when it is mounted.
    */
-  constructor(private readonly ctx: ClientContextLike) {}
+  constructor(
+    private readonly ctx: ClientContextLike,
+    private readonly sessions?: SessionsServiceLike,
+  ) {}
+
+  /**
+   * Follow the conversation the user is looking at.
+   *
+   * The panel is root-scoped, so it is told rather than scoped: the drawer
+   * reads the harness's own selection and hands it down.
+   * @param conversation - the conversation on screen, or null.
+   * @param titles - every conversation's title, by id.
+   */
+  setConversation(
+    conversation: ConversationView | null,
+    titles: Readonly<Record<string, string>>,
+  ): void {
+    const changed = conversation?.id !== this.#state.conversation?.id
+    this.#set({ conversation, conversations: titles })
+    if (!changed) return
+    // A refresh already on the wire belongs to the conversation that is now
+    // gone; letting it land would commit that conversation's session under
+    // this one, and a delete could then target the wrong session.
+    this.#generation += 1
+    this.#refreshing = false
+    // A different conversation means a different shopping session on screen.
+    this.#set({ boundSessionId: null, session: null, openUrls: [] })
+    // Re-read whether or not the drawer is open: the header badge renders from
+    // these lists too.
+    void this.refresh({ silent: true })
+  }
 
   /**
    * @returns the current state; a stable reference until it changes.
@@ -144,7 +217,7 @@ export class WorkbenchStore {
 
   /** Close the drawer and return focus to the control that opened it. */
   close(): void {
-    this.#set({ open: false, pendingDelete: null })
+    this.#set({ open: false, pendingDelete: null, pendingRebind: null })
     this.#retimer()
     this.#trigger?.focus()
   }
@@ -161,12 +234,18 @@ export class WorkbenchStore {
     this.#listeners.clear()
   }
 
-  /** Re-read after a reconnect. */
+  /**
+   * Re-read after a reconnect.
+   *
+   * The lists are re-read whether or not the drawer is open: the conversation
+   * header badge renders from them too, and a restarted Host or a moved data
+   * directory would otherwise leave it wrong until someone opened the drawer.
+   */
   resume(): void {
-    if (this.#disposed || !this.#state.open) return
+    if (this.#disposed) return
     this.#retimer()
     void this.refresh({ silent: true })
-    void this.refreshStatus()
+    if (this.#state.open) void this.refreshStatus()
   }
 
   /**
@@ -208,7 +287,7 @@ export class WorkbenchStore {
       this.#retimer()
       return
     }
-    const sessionId = this.#state.currentId
+    const sessionId = this.#state.boundSessionId
     if (sessionId === null) return
     this.#set({ pendingDelete: { ...pending, sessionId } })
     this.#retimer()
@@ -265,56 +344,75 @@ export class WorkbenchStore {
     const settled = options.silent ? {} : { error: null }
     if (!options.silent) this.#set({ loading: true })
     this.#refreshing = true
-    // Set once the list read has established where the Host now points, so a
-    // failure below can tell "could not read the document" from "did not get
-    // as far as asking".
-    let pointer: string | null | undefined
+    let reached = false
+    // The binding the list just reported, so a failing document read can still
+    // say WHICH session it failed on — on the first refresh after a reload the
+    // state does not know yet.
+    let listedBound: string | null | undefined
     try {
       const listed = await callWorkbench<{
         current_session_id: string | null
         sessions: SessionSummaryView[]
+        bindings: BindingView[]
       }>(this.ctx, 'listSessions', {})
       if (generation !== this.#generation) return
+      reached = true
       // Newest first: the session someone is capturing into is the one they
       // just made.
       const sessions = this.#keepSessions([...listed.sessions].reverse())
+      const bindings = this.#keepBindings(listed.bindings)
       const currentId = listed.current_session_id
-      pointer = currentId
-      if (currentId === null) {
-        this.#set({ sessions, currentId, session: null, loading: false, ...settled })
+      // What the panel shows is what THIS conversation is about; the capture
+      // target is a separate line, and the two are allowed to differ.
+      const conversationId = this.#state.conversation?.id
+      const boundSessionId =
+        conversationId === undefined
+          ? null
+          : (bindings.find((entry) => entry.dsh_session_id === conversationId)?.session_id ?? null)
+      listedBound = boundSessionId
+      if (boundSessionId === null) {
+        this.#set({
+          sessions,
+          bindings,
+          currentId,
+          boundSessionId: null,
+          session: null,
+          loading: false,
+          ...settled,
+        })
         return
       }
       // The list is committed before the document read so a failing read does
-      // not throw away a list that arrived fine. The pointer is NOT committed
-      // here: `currentId` and `session` have to move together, or a delete
-      // could carry a card's URL into a different session.
-      this.#set({ sessions })
+      // not throw away a list that arrived fine. The bound id is NOT committed
+      // here: it and `session` have to move together, or a delete could carry
+      // a card's URL into a different session.
+      this.#set({ sessions, bindings, currentId })
       const session = await callWorkbench<SessionView>(this.ctx, 'showSession', {
-        sessionId: currentId,
+        sessionId: boundSessionId,
       })
       if (generation !== this.#generation) return
-      const sameSession = currentId === this.#state.currentId
+      const sameSession = boundSessionId === this.#state.boundSessionId
       const changed = syncKey(session) !== syncKey(this.#state.session)
       if (!sameSession || changed) {
         const before = sameSession ? offersOf(this.#state.session).length : 0
         const after = offersOf(session).length
-        this.#set({ currentId, session, loading: false, ...settled })
+        this.#set({ boundSessionId, session, loading: false, ...settled })
         if (sameSession && after > before) {
           this.#notice(`已同步 ${after - before} 个新采集商品`)
         }
         return
       }
-      this.#set({ currentId, loading: false, ...settled })
+      this.#set({ boundSessionId, loading: false, ...settled })
     } catch (error) {
       if (generation !== this.#generation) return
-      // A session whose file is gone must not keep rendering its products.
-      if (error instanceof RpcFailure && error.code === 'dealbuddy/session-not-found') {
-        this.#set({ session: null, currentId: null })
-      } else if (pointer !== undefined && pointer !== this.#state.currentId) {
-        // The pointer moved but its document would not read (unreadable or
-        // malformed file). Keeping the old pair would leave the rail claiming
-        // captures still land in the session on screen, which is now false.
-        this.#set({ currentId: pointer, session: null })
+      if (reached) {
+        // The list read got through, so which session this conversation is
+        // about is known even though its document would not load — whether it
+        // is gone, malformed, or unreadable. Reporting the conversation as
+        // unbound would hide the reason and offer a bind action for a row that
+        // is already bound; keeping the old document would claim products that
+        // are no longer what this conversation is about.
+        this.#set({ boundSessionId: listedBound ?? this.#state.boundSessionId, session: null })
       }
       if (options.silent) {
         // A failed poll retries on the next tick, exactly as the Python
@@ -339,15 +437,141 @@ export class WorkbenchStore {
     const category = this.#state.draftCategory
     const request = this.#state.draftRequest
     if (category.trim() === '') return
+    const conversation = this.#state.conversation
+    let unbound = false
     await this.#write(async () => {
-      await callWorkbench(this.ctx, 'createSession', { category, request })
+      // One call: a session made from inside a conversation belongs to it, and
+      // splitting that into create-then-bind would let the first half succeed
+      // on its own — leaving an unbound session and a form the user submits
+      // again, which is how duplicates appear.
+      const created = await callWorkbench<{ session_id: string; bound: boolean }>(
+        this.ctx,
+        'createSession',
+        {
+          category,
+          request,
+          ...(conversation === null ? {} : { dshSessionId: conversation.id }),
+        },
+      )
+      // The session exists either way, so the form is cleared either way —
+      // leaving it filled is what makes a user submit it again and end up with
+      // two. Only the binding half is worth reporting when it did not happen,
+      // and that has to wait until after the re-read below, which clears the
+      // error line.
+      unbound = conversation !== null && !created.bound
       // Clear only what was actually submitted. The inputs stay live during
       // the call, so anything typed since belongs to the next session.
       this.#set({
         ...(this.#state.draftCategory === category ? { draftCategory: '' } : {}),
         ...(this.#state.draftRequest === request ? { draftRequest: '' } : {}),
       })
-      this.#notice('会话已创建，采集会投递到这里')
+      if (conversation === null || created.bound) {
+        this.#notice('会话已创建，采集会投递到这里')
+      }
+    })
+    if (unbound) {
+      this.#set({ error: '会话已创建，但没能绑定到本对话。在列表里点「绑定到本对话」。' })
+    }
+  }
+
+  /**
+   * Bind one shopping session to the conversation on screen.
+   *
+   * A session that already belongs to another conversation asks first: moving
+   * it silently would leave that conversation talking about nothing.
+   * @param sessionId - the shopping session.
+   * @param target - the conversation the confirmation was opened for; when
+   *   given, the confirmation has already been answered.
+   * @returns settlement once the panel reflects the binding.
+   */
+  async bind(sessionId: string, target?: string): Promise<void> {
+    const conversation = target ?? this.#state.conversation?.id
+    if (conversation === undefined) return
+    const held = this.#state.bindings.find((entry) => entry.session_id === sessionId)
+    if (held !== undefined && held.dsh_session_id === conversation) return
+    if (held !== undefined && target === undefined) {
+      const summary = this.#state.sessions.find((entry) => entry.session_id === sessionId)
+      this.#set({
+        pendingRebind: {
+          session_id: sessionId,
+          category: summary?.category ?? '',
+          fromTitle: this.#state.conversations[held.dsh_session_id] ?? held.dsh_session_id,
+          toConversationId: conversation,
+        },
+      })
+      this.#retimer()
+      return
+    }
+    const rebinding = held !== undefined
+    // What this panel believes owns the session today. Another tab may have
+    // moved it since the last read, and displacing a conversation the user was
+    // never shown is not theirs to confirm — so the Host refuses a mismatch
+    // and the question gets asked again against what is true now.
+    const expectedOwner = held?.dsh_session_id ?? ''
+    await this.#writeBinding(async () => {
+      await callWorkbench(this.ctx, 'bind', {
+        sessionId,
+        dshSessionId: conversation,
+        expectedOwner,
+      })
+      this.#notice(rebinding ? '已换绑到本对话' : '已绑定到本对话')
+    })
+  }
+
+  /**
+   * Answer the rebind confirmation.
+   * @param confirmed - whether to go ahead.
+   * @returns settlement once the panel reflects the answer.
+   */
+  async resolveRebind(confirmed: boolean): Promise<void> {
+    const pending = this.#state.pendingRebind
+    this.#set({ pendingRebind: null })
+    this.#retimer()
+    if (pending === null || !confirmed) return
+    await this.bind(pending.session_id, pending.toConversationId)
+  }
+
+  /**
+   * Start a fresh conversation and bind one shopping session to it.
+   * @param sessionId - the shopping session.
+   * @returns settlement once the new conversation is open and bound.
+   */
+  async bindToNewConversation(sessionId: string): Promise<void> {
+    const sessions = this.sessions
+    if (sessions === undefined) return
+    // This row was rendered as unbound; say so, so that a session another tab
+    // claimed in the meantime is not silently moved into a conversation the
+    // user is about to be dropped into.
+    const expectedOwner =
+      this.#state.bindings.find((entry) => entry.session_id === sessionId)?.dsh_session_id ?? ''
+    await this.#writeBinding(async () => {
+      const dshSessionId = await sessions.create()
+      sessions.open(dshSessionId)
+      await callWorkbench(this.ctx, 'bind', { sessionId, dshSessionId, expectedOwner })
+      this.#notice('对话已创建并绑定')
+    })
+  }
+
+  /**
+   * Show the conversation a shopping session belongs to.
+   * @param dshSessionId - the conversation.
+   */
+  openConversation(dshSessionId: string): void {
+    this.sessions?.open(dshSessionId)
+  }
+
+  /**
+   * Send this conversation's report to its own model for evaluation.
+   * @returns settlement once the message is queued.
+   */
+  async evaluateReport(): Promise<void> {
+    const conversation = this.#state.conversation
+    if (conversation === null) return
+    await this.#write(async () => {
+      // `agentId` is the Gateway's wire name for a live conversation; it
+      // resumes a cold one, which is what sending it a message needs.
+      await callWorkbench(this.ctx, 'evaluateReport', { agentId: conversation.id })
+      this.#notice('报告已发送到对话')
     })
   }
 
@@ -360,6 +584,7 @@ export class WorkbenchStore {
     if (sessionId === this.#state.currentId) return
     await this.#write(async () => {
       await callWorkbench(this.ctx, 'setCurrentSession', { sessionId })
+      this.#notice('投递目标已切换')
     })
   }
 
@@ -387,6 +612,23 @@ export class WorkbenchStore {
   }
 
   /**
+   * Run one binding write, re-reading before it reports a refusal.
+   *
+   * A refused rebind means this panel's view of who owns the session is out of
+   * date, so the message telling the user to confirm again is only true once
+   * the table has actually been re-read — otherwise the next attempt asks the
+   * same obsolete question and is refused again.
+   * @param write - the write to perform.
+   */
+  async #writeBinding(write: () => Promise<void>): Promise<void> {
+    await this.#write(write)
+    if (!this.#lastFailureWasMove) return
+    this.#lastFailureWasMove = false
+    await this.refresh({ silent: true })
+    this.#set({ error: '这个购物会话刚被别的对话绑定了，已经刷新，请再确认一次。' })
+  }
+
+  /**
    * Run one write, then re-read.
    * @param write - the write to perform.
    */
@@ -396,6 +638,8 @@ export class WorkbenchStore {
       await write()
       await this.refresh()
     } catch (error) {
+      this.#lastFailureWasMove =
+        error instanceof RpcFailure && error.code === 'dealbuddy/binding-moved'
       this.#set({ error: describeFailure(error) })
     } finally {
       this.#set({ busy: false })
@@ -418,6 +662,7 @@ export class WorkbenchStore {
       !this.#disposed &&
       this.#state.open &&
       this.#state.pendingDelete === null &&
+      this.#state.pendingRebind === null &&
       isPageVisible()
     if (wanted && this.#timer === undefined) {
       this.#timer = setInterval(() => {
@@ -451,6 +696,21 @@ export class WorkbenchStore {
     if (keys.every((key) => Object.is(this.#state[key], patch[key]))) return
     this.#state = { ...this.#state, ...patch }
     for (const listener of this.#listeners) listener()
+  }
+
+  /**
+   * Keep the previous session array when the list did not change.
+   *
+   * The Host returns fresh objects every poll, so identity has to be re-derived
+   * from the contents for {@link #set}'s check to mean anything.
+   * @param sessions - the newly read list, already in display order.
+   * @returns the list to store, reusing the current array when equivalent.
+   */
+  #keepBindings(bindings: BindingView[]): readonly BindingView[] {
+    const key = bindings.map((entry) => `${entry.session_id}|${entry.dsh_session_id}`).join('\u0000')
+    if (key === this.#bindingsKey) return this.#state.bindings
+    this.#bindingsKey = key
+    return bindings
   }
 
   /**

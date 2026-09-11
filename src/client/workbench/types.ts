@@ -51,6 +51,19 @@ export interface SessionSummaryView {
   updated_at: string
 }
 
+/** Which conversation one shopping session belongs to. */
+export interface BindingView {
+  session_id: string
+  dsh_session_id: string
+  bound_at: string
+}
+
+/** One dsh conversation, as the panel needs to name it. */
+export interface ConversationView {
+  id: string
+  title: string
+}
+
 /** What the panel shows about the capture path. */
 export interface WorkbenchStatusView {
   data_dir: string

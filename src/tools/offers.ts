@@ -6,9 +6,10 @@ import { captureToVerifiedOffer, CONFIDENCES, PLATFORMS } from '../core/capture.
 import { offerNodes, rebuildReport, upsertOffer } from '../core/session.js'
 import { refineSession } from '../core/refine.js'
 import { getReport, removeOfferByUrl } from '../services/sessions.js'
+import type { BindingStore } from '../store/binding-store.js'
 import type { SessionStore } from '../store/session-store.js'
-import { sessionIdOf } from './sessions.js'
-import { toPlain, writeSummary } from './shared.js'
+import { metaSessionId, resolvedSessionId } from './sessions.js'
+import { resolveSessionId, toPlain, writeSummary } from './shared.js'
 
 /**
  * Tools that change a session's products or requirements.
@@ -19,13 +20,13 @@ import { toPlain, writeSummary } from './shared.js'
  * @param store - the session store.
  * @returns the tool definition.
  */
-export function addOfferTool(store: SessionStore): ToolDefinition {
+export function addOfferTool(store: SessionStore, bindings: BindingStore): ToolDefinition {
   return defineTool({
     name: 'dealbuddy_add_offer',
     description:
       'Record one product in a session from facts the user already supplied. Prefer the browser extension: it reads the real detail page. Use this only when the user has given you the fields directly. Re-adding the same URL replaces the earlier record.',
     parameters: {
-      session_id: { type: 'string', required: true, description: 'The session to add to.' },
+      session_id: { type: 'string', description: 'The session to add to. Omit to use the shopping session bound to the current conversation.' },
       offer: {
         type: 'object',
         required: true,
@@ -53,7 +54,9 @@ export function addOfferTool(store: SessionStore): ToolDefinition {
       },
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderWrite(value) }] },
-    async execute(args) {
+    async execute(args, exec) {
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      const sessionId = resolved.sessionId
       const raw = args.offer as Record<string, unknown>
       const specs: StringMap = new Map()
       const rawSpecs = raw['specs']
@@ -79,11 +82,15 @@ export function addOfferTool(store: SessionStore): ToolDefinition {
         },
         nowIso(),
       )
-      return store.update(args.session_id, (session) => {
-        upsertOffer(session, url, writeVerifiedOffer(offer))
-        rebuildReport(session)
-        return { ...writeSummary(session, args.session_id), added_url: url }
-      })
+      return store.update(
+        sessionId,
+        (session) => {
+          upsertOffer(session, url, writeVerifiedOffer(offer))
+          rebuildReport(session)
+          return { ...writeSummary(session, sessionId), added_url: url }
+        },
+        resolved.expectDataDir,
+      )
     },
   })
 }
@@ -93,18 +100,19 @@ export function addOfferTool(store: SessionStore): ToolDefinition {
  * @param store - the session store.
  * @returns the tool definition.
  */
-export function removeOfferTool(store: SessionStore): ToolDefinition {
+export function removeOfferTool(store: SessionStore, bindings: BindingStore): ToolDefinition {
   return defineTool({
     name: 'dealbuddy_remove_offer',
     description:
       'Remove one product from a session by its URL, then rebuild the report. The URL is the identity, so a product captured twice has one record.',
     parameters: {
-      session_id: { type: 'string', required: true, description: 'The session to remove from.' },
+      session_id: { type: 'string', description: 'The session to remove from. Omit to use the shopping session bound to the current conversation.' },
       url: { type: 'string', required: true, description: 'The product URL to remove.' },
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderWrite(value) }] },
-    async execute(args) {
-      return removeOfferByUrl(store, args.session_id, args.url)
+    async execute(args, exec) {
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      return removeOfferByUrl(store, resolved.sessionId, args.url, resolved.expectDataDir)
     },
   })
 }
@@ -114,13 +122,13 @@ export function removeOfferTool(store: SessionStore): ToolDefinition {
  * @param store - the session store.
  * @returns the tool definition.
  */
-export function refineRequirementsTool(store: SessionStore): ToolDefinition {
+export function refineRequirementsTool(store: SessionStore, bindings: BindingStore): ToolDefinition {
   return defineTool({
     name: 'dealbuddy_refine_requirements',
     description:
       'DESTRUCTIVE: updating the requirements clears every captured product and the report in that session, because the products were gathered under the old requirements. Tell the user exactly what will be lost and get their agreement before calling this. Changing the category also resets the requirement version to 1.',
     parameters: {
-      session_id: { type: 'string', required: true, description: 'The session to refine.' },
+      session_id: { type: 'string', description: 'The session to refine. Omit to use the shopping session bound to the current conversation.' },
       changes: {
         type: 'object',
         required: true,
@@ -145,9 +153,11 @@ export function refineRequirementsTool(store: SessionStore): ToolDefinition {
       },
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderRefine(value) }] },
-    async execute(args) {
+    async execute(args, exec) {
       const changes = toChangeMap(args.changes as Record<string, unknown>)
-      return store.update(args.session_id, (session) => {
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      const sessionId = resolved.sessionId
+      return store.update(sessionId, (session) => {
         const before = offerNodes(session).length
         const outcome = refineSession(session, changes)
         return {
@@ -167,13 +177,13 @@ export function refineRequirementsTool(store: SessionStore): ToolDefinition {
  * @param store - the session store.
  * @returns the tool definition.
  */
-export function getReportTool(store: SessionStore): ToolDefinition {
+export function getReportTool(store: SessionStore, bindings: BindingStore): ToolDefinition {
   return defineTool({
     name: 'dealbuddy_get_report',
     description:
       'Read a session\'s Markdown report. It is a digest with four slots plus rejects, not the full candidate list, so use dealbuddy_show_session when the user asks about their options.',
     parameters: {
-      session_id: { type: 'string', required: true, description: 'The session to read.' },
+      session_id: { type: 'string', description: 'The session to read. Omit to use the shopping session bound to the current conversation.' },
     },
     output: {
       schema: {
@@ -193,14 +203,18 @@ export function getReportTool(store: SessionStore): ToolDefinition {
               : value.report,
         },
       ],
+      // The argument may not name a session — the conversation's own binding
+      // stands in for it — so the title comes from what the call resolved.
+      presentationMeta: (_args, value) => ({ session_id: resolvedSessionId(value) }),
     },
-    presentResult: (args, result) =>
+    presentResult: (_args, result) =>
       result.isError
         ? undefined
-        : { card: 'generic', title: `DealBuddy 选品报告 · ${sessionIdOf(args)}` },
+        : { card: 'generic', title: `DealBuddy 选品报告 · ${metaSessionId(result.meta)}` },
     isConcurrencySafe: () => true,
-    async execute(args) {
-      return getReport(store, args.session_id)
+    async execute(args, exec) {
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      return getReport(store, resolved.sessionId, resolved.expectDataDir)
     },
   })
 }

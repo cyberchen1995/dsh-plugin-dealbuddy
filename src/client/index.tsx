@@ -1,8 +1,9 @@
 import { DEALBUDDY_SETTINGS_NAMESPACE, type DealbuddySettings } from '../settings.js'
 import { DealbuddyCard } from './settings-card.js'
-import type { ClientContextLike, SettingsScopeLike } from './scope.js'
+import type { ClientContextLike, SessionsServiceLike, SettingsScopeLike } from './scope.js'
 import { WorkbenchDrawer } from './workbench/Drawer.js'
 import { WorkbenchTrigger } from './workbench/FooterAction.js'
+import { WorkbenchBadge } from './workbench/HeaderBadge.js'
 import { WorkbenchStore } from './workbench/store.js'
 import { ensureWorkbenchStyles } from './workbench/styles.js'
 
@@ -15,7 +16,7 @@ import { ensureWorkbenchStyles } from './workbench/styles.js'
  */
 
 /** Browser services this half requires before it mounts. */
-export const inject = ['slots', 'settingsScope', 'connection'] as const
+export const inject = ['slots', 'settingsScope', 'connection', 'sessions'] as const
 
 /**
  * Register the card and the panel.
@@ -37,7 +38,8 @@ export function apply(ctx: unknown): void {
     ),
   )
 
-  const store = new WorkbenchStore(client)
+  const sessions = client.get('sessions') as SessionsServiceLike | undefined
+  const store = new WorkbenchStore(client, sessions)
 
   client.slots.inject('sidebar.footer.action', () =>
     client.slots.register(
@@ -52,6 +54,14 @@ export function apply(ctx: unknown): void {
     ),
   )
 
+  // Session-scoped, so the badge names the conversation it is rendered in.
+  client.slots.inject('conversation.session.header.actions', () =>
+    client.slots.register(
+      { name: 'conversation.session.header.actions', id: 'dealbuddy-workbench', order: 60 },
+      (props: { sessionId?: string }) => WorkbenchBadge({ store, ...props }),
+    ),
+  )
+
   // A reconnect means the Host may have restarted under us; re-read rather
   // than keep showing a session list from before.
   client.effect(() => {
@@ -59,7 +69,32 @@ export function apply(ctx: unknown): void {
     const off = client.on('connection/reset', () => {
       store.resume()
     })
+    // The harness publishes no "conversation changed" event, so the selection
+    // is read from its own list snapshot; the callback fires for every list
+    // mutation, and the store ignores the ones that do not move the selection.
+    const publish = (): void => {
+      const snapshot = sessions?.list.getSnapshot()
+      if (snapshot === undefined) return
+      const titles: Record<string, string> = {}
+      for (const id of snapshot.ids) {
+        const row = snapshot.byId[id]
+        titles[id] = row?.displayTitle ?? row?.title ?? id
+      }
+      const current = snapshot.current
+      store.setConversation(
+        current === undefined ? null : { id: current, title: titles[current] ?? current },
+        titles,
+      )
+    }
+    publish()
+    const offSessions = sessions?.list.subscribe(publish)
+    // Read once at startup so a conversation that already has a shopping
+    // session shows its badge straight away. Without this the bindings arrive
+    // only when the drawer is first opened, which is the one thing the badge
+    // is supposed to save you from doing.
+    void store.refresh({ silent: true })
     return () => {
+      offSessions?.()
       off()
       store.dispose()
       removeStyles()

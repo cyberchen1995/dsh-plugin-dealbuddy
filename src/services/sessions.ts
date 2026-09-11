@@ -84,8 +84,9 @@ export async function showSession(
   store: SessionStore,
   sessionId: string,
   options: ShowSessionOptions,
+  expectDataDir?: string,
 ): Promise<ShowSessionResult> {
-  const session = await store.load(sessionId)
+  const session = await store.load(sessionId, expectDataDir)
   if (session === undefined) throw new SessionNotFoundError(sessionId)
   // Work on a copy so the view's truncation never reaches the file.
   const view = parseJson(stringifyJson(session)) as JsonObject
@@ -152,14 +153,19 @@ export async function removeOfferByUrl(
   store: SessionStore,
   sessionId: string,
   url: string,
+  expectDataDir?: string,
 ): Promise<WriteSummary & { removed_offer: PlainJson }> {
-  return store.update(sessionId, (session) => {
-    const removed = removeOffer(session, url)
-    const first = removed[0]
-    if (first === undefined) throw new OfferNotFoundError(url)
-    rebuildReport(session)
-    return { ...writeSummary(session, sessionId), removed_offer: toPlain(first) }
-  })
+  return store.update(
+    sessionId,
+    (session) => {
+      const removed = removeOffer(session, url)
+      const first = removed[0]
+      if (first === undefined) throw new OfferNotFoundError(url)
+      rebuildReport(session)
+      return { ...writeSummary(session, sessionId), removed_offer: toPlain(first) }
+    },
+    expectDataDir,
+  )
 }
 
 /**
@@ -172,8 +178,9 @@ export async function removeOfferByUrl(
 export async function getReport(
   store: SessionStore,
   sessionId: string,
+  expectDataDir?: string,
 ): Promise<{ session_id: string; report: string }> {
-  const session = await store.load(sessionId)
+  const session = await store.load(sessionId, expectDataDir)
   if (session === undefined) throw new SessionNotFoundError(sessionId)
   const report = session.get('report_markdown')
   return { session_id: sessionId, report: typeof report === 'string' ? report : '' }

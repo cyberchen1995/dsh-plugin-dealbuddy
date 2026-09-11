@@ -5,7 +5,9 @@ import {
   setCurrentSession,
   showSession,
 } from '../services/sessions.js'
+import type { BindingStore } from '../store/binding-store.js'
 import type { SessionStore } from '../store/session-store.js'
+import { resolveSessionId } from './shared.js'
 
 /**
  * Session lifecycle tools: create, show, and point captures at a session.
@@ -50,6 +52,7 @@ export function createSessionTool(store: SessionStore): ToolDefinition {
  */
 export function showSessionTool(
   store: SessionStore,
+  bindings: BindingStore,
   ocrPreviewChars: () => number,
 ): ToolDefinition {
   return defineTool({
@@ -57,7 +60,7 @@ export function showSessionTool(
     description:
       'Show one session with every captured product. Use this rather than the report when explaining the options: the report only has four slots, so a product that meets the requirements without being the best or the cheapest never appears in it. Recognised detail-image text is shortened by default.',
     parameters: {
-      session_id: { type: 'string', required: true, description: 'The session to show.' },
+      session_id: { type: 'string', description: 'The session to show. Omit to use the shopping session bound to the current conversation.' },
       include_ocr_text: {
         type: 'boolean',
         description: 'Keep the full recognised detail-image text instead of a preview.',
@@ -70,18 +73,28 @@ export function showSessionTool(
     output: {
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: renderSession(value) }],
+      // The argument may not name a session at all — the conversation's own
+      // binding stands in for it — so the card's title comes from what the
+      // call resolved rather than from what it was asked.
+      presentationMeta: (_args, value) => ({ session_id: resolvedSessionId(value) }),
     },
-    presentResult: (args, result) =>
+    presentResult: (_args, result) =>
       result.isError
         ? undefined
-        : { card: 'generic', title: `DealBuddy 会话 ${sessionIdOf(args)}` },
+        : { card: 'generic', title: `DealBuddy 会话 ${metaSessionId(result.meta)}` },
     isConcurrencySafe: () => true,
-    async execute(args) {
-      return showSession(store, args.session_id, {
-        includeOcrText: args.include_ocr_text === true,
-        includeMessages: args.include_messages === true,
-        ocrPreviewChars: ocrPreviewChars(),
-      })
+    async execute(args, exec) {
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      return showSession(
+        store,
+        resolved.sessionId,
+        {
+          includeOcrText: args.include_ocr_text === true,
+          includeMessages: args.include_messages === true,
+          ocrPreviewChars: ocrPreviewChars(),
+        },
+        resolved.expectDataDir,
+      )
     },
   })
 }
@@ -193,4 +206,28 @@ export function sessionIdOf(args: unknown): string {
   const record = args as { session_id?: unknown } | null
   const id = record?.session_id
   return typeof id === 'string' ? id : '(未知)'
+}
+
+/**
+ * Read the session a call actually acted on, out of its own result.
+ * @param value - the tool's canonical value.
+ * @returns the session id, or an empty string when the shape is unexpected.
+ */
+export function resolvedSessionId(value: unknown): string {
+  const record = value as { session_id?: unknown; session?: { session_id?: unknown } } | null
+  const direct = record?.session_id
+  if (typeof direct === 'string') return direct
+  const nested = record?.session?.session_id
+  return typeof nested === 'string' ? nested : ''
+}
+
+/**
+ * Narrow the presentation metadata back into a title fragment.
+ * @param meta - what `presentationMeta` projected.
+ * @returns the session id, or a placeholder when it is absent.
+ */
+export function metaSessionId(meta: unknown): string {
+  const record = meta as { session_id?: unknown } | null
+  const id = record?.session_id
+  return typeof id === 'string' && id !== '' ? id : '(未知)'
 }

@@ -64,6 +64,29 @@ export interface SlotRegisterOptions {
   order?: number
 }
 
+/** One row of the harness's own conversation list. */
+export interface HarnessSessionRow {
+  displayTitle?: string
+  title?: string
+}
+
+/** The conversation list and the selection, as the panel reads them. */
+export interface HarnessSessionListState {
+  current?: string
+  ids: readonly string[]
+  byId: Readonly<Record<string, HarnessSessionRow | undefined>>
+}
+
+/** The harness's conversation service, narrowed to what the panel uses. */
+export interface SessionsServiceLike {
+  list: {
+    getSnapshot(): HarnessSessionListState
+    subscribe(listener: () => void): () => void
+  }
+  create(options?: { cwd?: string }): Promise<string>
+  open(id: string): void
+}
+
 /** The browser services this plugin's registrations reach for. */
 export interface ClientContextLike {
   slots: {
@@ -83,6 +106,11 @@ export interface ClientContextLike {
       ): Promise<RpcResultLike>
     }
   }
+  /**
+   * @param name - a cordis service key.
+   * @returns the service, or undefined when nothing provides it.
+   */
+  get(name: string): unknown
   /**
    * @param event - the cordis event name.
    * @param listener - invoked on each occurrence.
