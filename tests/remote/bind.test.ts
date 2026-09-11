@@ -76,4 +76,24 @@ describe('bind', () => {
 
     expect(result.binding.dsh_session_id).toBe('conv-9')
   })
+
+  it('lets only one of two concurrent rebinds through', async () => {
+    await remote.bind(sessionId, 'conv-1', '')
+
+    // Two tabs submit at once from the same view. Checking ownership outside
+    // the store's lock would let both validations pass and both writes land,
+    // so the second would displace the first without anyone being asked.
+    const results = await Promise.allSettled([
+      remote.bind(sessionId, 'conv-2', 'conv-1'),
+      remote.bind(sessionId, 'conv-3', 'conv-1'),
+    ])
+
+    const won = results.filter((r) => r.status === 'fulfilled')
+    const refused = results.filter((r) => r.status === 'rejected')
+    expect(won).toHaveLength(1)
+    expect(refused).toHaveLength(1)
+    expect((refused[0] as PromiseRejectedResult).reason).toMatchObject({
+      code: 'dealbuddy/binding-moved',
+    })
+  })
 })

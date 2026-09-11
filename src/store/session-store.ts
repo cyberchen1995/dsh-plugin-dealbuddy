@@ -84,8 +84,26 @@ export class SessionStore {
    * @returns the parsed session, or `undefined` when the file is absent.
    * @throws when the id is invalid or the file is malformed.
    */
-  async load(sessionId: string): Promise<JsonObject | undefined> {
+  async load(sessionId: string, expectDataDir?: string): Promise<JsonObject | undefined> {
+    this.#assertDataDir(expectDataDir)
     return readJsonObject(sessionPath(this.dataDir, sessionId))
+  }
+
+  /**
+   * Refuse to act on a directory the caller did not mean.
+   *
+   * An id resolved from the binding table names a session in the directory it
+   * was read from. Two directories can hold the same id — a restored or copied
+   * data set — so acting on one with an id from the other is how a destructive
+   * call lands on the wrong session.
+   * @param expectDataDir - the directory the caller resolved against, if any.
+   * @throws when the store has moved since.
+   */
+  #assertDataDir(expectDataDir: string | undefined): void {
+    if (expectDataDir === undefined || expectDataDir === this.dataDir) return
+    throw new Error(
+      `the data directory changed while this call was running (expected ${expectDataDir}, now ${this.dataDir})`,
+    )
   }
 
   /**
@@ -131,14 +149,21 @@ export class SessionStore {
    * `session.py:46` does.
    * @param sessionId - the session id.
    * @param mutate - the critical section; it may return a value to pass through.
+   * @param expectDataDir - refuse if the store has moved directories since the
+   *   caller resolved this id.
    * @returns whatever the mutator returned.
    * @throws when the session does not exist.
    */
   async update<T>(
     sessionId: string,
     mutate: (session: JsonObject) => T | Promise<T>,
+    expectDataDir?: string,
   ): Promise<T> {
     return this.mutex.run(sessionId, async () => {
+      // Checked inside the lock: the lock defers this body, so a check made at
+      // the call site is a check made against a directory that can still move
+      // before the write.
+      this.#assertDataDir(expectDataDir)
       const session = await this.load(sessionId)
       if (session === undefined) throw new SessionNotFoundError(sessionId)
       const result = await mutate(session)

@@ -16,7 +16,7 @@ import {
   showSession,
 } from './services/sessions.js'
 import { probeIntakeListener } from './services/status.js'
-import type { Binding, BindingStore } from './store/binding-store.js'
+import { BindingMovedError, type Binding, type BindingStore } from './store/binding-store.js'
 import { isValidSessionId } from './store/paths.js'
 import { SessionNotFoundError, type SessionStore } from './store/session-store.js'
 import type { PlainJson } from './tools/shared.js'
@@ -170,17 +170,25 @@ export class DealbuddyRemote extends TypertRemoteService {
       })
     }
     this.assertSameDataDir(dataDir)
-    if (expectedOwner !== undefined) {
-      const owner = (await this.bindings.bySession(sessionId))?.dsh_session_id ?? ''
-      if (owner !== expectedOwner) {
+    try {
+      // Both expectations travel into the store's own lock: checking ownership
+      // out here would let two tabs pass the same check and then write one
+      // after the other, which is the race this is meant to stop.
+      const binding = await this.bindings.bind(sessionId, dshSessionId, {
+        expectDataDir: dataDir,
+        ...(expectedOwner === undefined ? {} : { expectedOwner }),
+      })
+      return { binding }
+    } catch (error) {
+      if (error instanceof BindingMovedError) {
         throw new RemoteError(
           'dealbuddy/binding-moved',
           'this shopping session belongs to a different conversation now',
-          { sessionId, owner },
+          { sessionId, owner: error.owner },
         )
       }
+      throw error
     }
-    return { binding: await this.bindings.bind(sessionId, dshSessionId, dataDir) }
   }
 
   /**
@@ -297,7 +305,9 @@ export class DealbuddyRemote extends TypertRemoteService {
       return { session_id: created.current_session_id, bound: false }
     }
     try {
-      await this.bindings.bind(created.current_session_id, dshSessionId, dataDir)
+      await this.bindings.bind(created.current_session_id, dshSessionId, {
+        expectDataDir: dataDir,
+      })
     } catch {
       // The session is already on disk and is already the capture target.
       // Failing the whole call would hide that and send the user back to a

@@ -190,7 +190,7 @@ describe('binding store', () => {
 
     // The lock defers the write body, so the caller's directory check cannot
     // be made at the call site — the expectation travels with the write.
-    await expect(store.bind('aaaaaaaaaaaa', 'conv-1', stale)).rejects.toThrow(
+    await expect(store.bind('aaaaaaaaaaaa', 'conv-1', { expectDataDir: stale })).rejects.toThrow(
       'data directory changed',
     )
     expect(await store.list()).toEqual([])

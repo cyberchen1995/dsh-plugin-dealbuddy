@@ -25,6 +25,21 @@ export const BINDINGS_FILENAME = 'dsh-bindings.json'
 /** Serialised as an array so an all-digit session id cannot be reordered by the engine. */
 const FORMAT_VERSION = 1
 
+/** The session belongs to a conversation other than the one the caller named. */
+export class BindingMovedError extends Error {
+  /**
+   * @param sessionId - the shopping session.
+   * @param owner - the conversation that holds it now; empty when nobody does.
+   */
+  constructor(
+    readonly sessionId: string,
+    readonly owner: string,
+  ) {
+    super(`session ${sessionId} belongs to a different conversation now`)
+    this.name = 'BindingMovedError'
+  }
+}
+
 /** One shopping session and the conversation it belongs to. */
 export interface Binding {
   /** The DealBuddy shopping session. */
@@ -155,15 +170,26 @@ export class BindingStore {
    * conversation that already holds another session replaces that one.
    * @param sessionId - the shopping session.
    * @param dshSessionId - the dsh conversation.
-   * @param expectDataDir - refuse if the store is no longer reading this
-   *   directory by the time the write runs. A caller that validated the
-   *   session somewhere else has to know the write landed in the same place,
-   *   and the lock defers this body, so the check belongs inside it rather
-   *   than at the call site.
+   * @param options - `expectDataDir` refuses the write if the store has moved
+   *   directories since the caller looked; `expectedOwner` refuses it if the
+   *   session belongs to someone other than the conversation the caller named
+   *   (the empty string meaning "nobody"). Both are checked inside the lock:
+   *   the lock defers this body, so a check made at the call site is a check
+   *   made against a table that can still change before the write.
    * @returns the binding that was written.
+   * @throws BindingMovedError when `expectedOwner` no longer holds.
    */
-  async bind(sessionId: string, dshSessionId: string, expectDataDir?: string): Promise<Binding> {
+  async bind(
+    sessionId: string,
+    dshSessionId: string,
+    options: { expectDataDir?: string; expectedOwner?: string } = {},
+  ): Promise<Binding> {
     return this.#write((entries) => {
+      if (options.expectedOwner !== undefined) {
+        const owner =
+          entries.find((entry) => entry.session_id === sessionId)?.dsh_session_id ?? ''
+        if (owner !== options.expectedOwner) throw new BindingMovedError(sessionId, owner)
+      }
       const kept = entries.filter(
         (entry) => entry.session_id !== sessionId && entry.dsh_session_id !== dshSessionId,
       )
@@ -173,7 +199,7 @@ export class BindingStore {
         bound_at: nowIso(),
       }
       return { next: [...kept, binding], result: binding }
-    }, expectDataDir)
+    }, options.expectDataDir)
   }
 
   /**

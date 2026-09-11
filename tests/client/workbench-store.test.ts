@@ -747,4 +747,63 @@ describe('workbench store', () => {
     expect(store.getSnapshot().draftCategory).toBe('')
     expect(store.getSnapshot().error).toContain('没能绑定到本对话')
   })
+
+  it('re-reads before telling the user to confirm again', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', []), null)
+    context.answers['listSessions'] = () => ({
+      ok: true,
+      value: {
+        current_session_id: 'aaaaaaaaaaaa',
+        data_dir: '/tmp/dealbuddy',
+        bindings: [{ session_id: 'aaaaaaaaaaaa', dsh_session_id: 'conv-2', bound_at: 't' }],
+        sessions: [
+          { session_id: 'aaaaaaaaaaaa', category: '电视', raw_request: '', version: 1, phase: 'created', verified_count: 0, report_available: false, created_at: '1', updated_at: '1' },
+        ],
+      },
+    })
+    context.answers['bind'] = () => ({
+      ok: false,
+      error: { code: 'dealbuddy/binding-moved', message: 'moved' },
+    })
+    store = newStore(context)
+    store.setConversation(
+      { id: CONVERSATION, title: '对话' },
+      { [CONVERSATION]: '对话', 'conv-2': '另一段对话' },
+    )
+    await store.refresh()
+    await store.bind('aaaaaaaaaaaa')
+    const readsBefore = context.calls.filter((call) => call.method === 'listSessions').length
+
+    await store.resolveRebind(true)
+
+    // The message says the panel has refreshed, so it has to have refreshed —
+    // otherwise the next attempt asks the same obsolete question.
+    expect(
+      context.calls.filter((call) => call.method === 'listSessions').length,
+    ).toBeGreaterThan(readsBefore)
+    expect(store.getSnapshot().error).toContain('请再确认一次')
+  })
+
+  it('says what it believes when binding into a fresh conversation', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', []), null)
+    const sessionsService = {
+      list: { getSnapshot: () => ({ ids: [], byId: {} }), subscribe: () => () => undefined },
+      create: async () => 'conv-new',
+      open: () => undefined,
+    }
+    store = new WorkbenchStore(context.asContext(), sessionsService)
+    store.setConversation({ id: CONVERSATION, title: '对话' }, { [CONVERSATION]: '对话' })
+    await store.refresh()
+
+    await store.bindToNewConversation('aaaaaaaaaaaa')
+
+    // Rendered as unbound, so it says so: a session another tab claimed since
+    // must not be moved into a conversation the user is being dropped into.
+    expect(context.calls.find((call) => call.method === 'bind')?.args).toMatchObject({
+      sessionId: 'aaaaaaaaaaaa',
+      expectedOwner: '',
+    })
+  })
 })

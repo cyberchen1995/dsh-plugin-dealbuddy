@@ -508,21 +508,14 @@ export class WorkbenchStore {
     // never shown is not theirs to confirm — so the Host refuses a mismatch
     // and the question gets asked again against what is true now.
     const expectedOwner = held?.dsh_session_id ?? ''
-    try {
-      await this.#write(async () => {
-        await callWorkbench(this.ctx, 'bind', {
-          sessionId,
-          dshSessionId: conversation,
-          expectedOwner,
-        })
-        this.#notice(rebinding ? '已换绑到本对话' : '已绑定到本对话')
+    await this.#writeBinding(async () => {
+      await callWorkbench(this.ctx, 'bind', {
+        sessionId,
+        dshSessionId: conversation,
+        expectedOwner,
       })
-    } finally {
-      if (this.#state.error !== null && this.#lastFailureWasMove) {
-        this.#lastFailureWasMove = false
-        this.#set({ error: '这个购物会话刚被别的对话绑定了，已经刷新，请再确认一次。' })
-      }
-    }
+      this.#notice(rebinding ? '已换绑到本对话' : '已绑定到本对话')
+    })
   }
 
   /**
@@ -546,10 +539,15 @@ export class WorkbenchStore {
   async bindToNewConversation(sessionId: string): Promise<void> {
     const sessions = this.sessions
     if (sessions === undefined) return
-    await this.#write(async () => {
+    // This row was rendered as unbound; say so, so that a session another tab
+    // claimed in the meantime is not silently moved into a conversation the
+    // user is about to be dropped into.
+    const expectedOwner =
+      this.#state.bindings.find((entry) => entry.session_id === sessionId)?.dsh_session_id ?? ''
+    await this.#writeBinding(async () => {
       const dshSessionId = await sessions.create()
       sessions.open(dshSessionId)
-      await callWorkbench(this.ctx, 'bind', { sessionId, dshSessionId })
+      await callWorkbench(this.ctx, 'bind', { sessionId, dshSessionId, expectedOwner })
       this.#notice('对话已创建并绑定')
     })
   }
@@ -611,6 +609,23 @@ export class WorkbenchStore {
       })
       this.#notice('商品已删除')
     })
+  }
+
+  /**
+   * Run one binding write, re-reading before it reports a refusal.
+   *
+   * A refused rebind means this panel's view of who owns the session is out of
+   * date, so the message telling the user to confirm again is only true once
+   * the table has actually been re-read — otherwise the next attempt asks the
+   * same obsolete question and is refused again.
+   * @param write - the write to perform.
+   */
+  async #writeBinding(write: () => Promise<void>): Promise<void> {
+    await this.#write(write)
+    if (!this.#lastFailureWasMove) return
+    this.#lastFailureWasMove = false
+    await this.refresh({ silent: true })
+    this.#set({ error: '这个购物会话刚被别的对话绑定了，已经刷新，请再确认一次。' })
   }
 
   /**

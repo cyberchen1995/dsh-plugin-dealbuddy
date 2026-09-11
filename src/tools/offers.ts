@@ -55,7 +55,8 @@ export function addOfferTool(store: SessionStore, bindings: BindingStore): ToolD
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderWrite(value) }] },
     async execute(args, exec) {
-      const sessionId = await resolveSessionId(args.session_id, exec, bindings, store)
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      const sessionId = resolved.sessionId
       const raw = args.offer as Record<string, unknown>
       const specs: StringMap = new Map()
       const rawSpecs = raw['specs']
@@ -81,11 +82,15 @@ export function addOfferTool(store: SessionStore, bindings: BindingStore): ToolD
         },
         nowIso(),
       )
-      return store.update(sessionId, (session) => {
-        upsertOffer(session, url, writeVerifiedOffer(offer))
-        rebuildReport(session)
-        return { ...writeSummary(session, sessionId), added_url: url }
-      })
+      return store.update(
+        sessionId,
+        (session) => {
+          upsertOffer(session, url, writeVerifiedOffer(offer))
+          rebuildReport(session)
+          return { ...writeSummary(session, sessionId), added_url: url }
+        },
+        resolved.expectDataDir,
+      )
     },
   })
 }
@@ -106,7 +111,8 @@ export function removeOfferTool(store: SessionStore, bindings: BindingStore): To
     },
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderWrite(value) }] },
     async execute(args, exec) {
-      return removeOfferByUrl(store, await resolveSessionId(args.session_id, exec, bindings, store), args.url)
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      return removeOfferByUrl(store, resolved.sessionId, args.url, resolved.expectDataDir)
     },
   })
 }
@@ -149,7 +155,8 @@ export function refineRequirementsTool(store: SessionStore, bindings: BindingSto
     output: { schema: { type: 'json' }, render: (_args, value) => [{ type: 'text', text: renderRefine(value) }] },
     async execute(args, exec) {
       const changes = toChangeMap(args.changes as Record<string, unknown>)
-      const sessionId = await resolveSessionId(args.session_id, exec, bindings, store)
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      const sessionId = resolved.sessionId
       return store.update(sessionId, (session) => {
         const before = offerNodes(session).length
         const outcome = refineSession(session, changes)
@@ -206,7 +213,8 @@ export function getReportTool(store: SessionStore, bindings: BindingStore): Tool
         : { card: 'generic', title: `DealBuddy 选品报告 · ${metaSessionId(result.meta)}` },
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      return getReport(store, await resolveSessionId(args.session_id, exec, bindings, store))
+      const resolved = await resolveSessionId(args.session_id, exec, bindings, store)
+      return getReport(store, resolved.sessionId, resolved.expectDataDir)
     },
   })
 }

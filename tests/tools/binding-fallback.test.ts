@@ -7,6 +7,7 @@ import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 
 import { getReportTool } from '../../src/tools/offers.js'
 import { metaSessionId, resolvedSessionId, showSessionTool } from '../../src/tools/sessions.js'
+import { resolveSessionId } from '../../src/tools/shared.js'
 import { createSession } from '../../src/services/sessions.js'
 import { BindingStore } from '../../src/store/binding-store.js'
 import { SessionStore } from '../../src/store/session-store.js'
@@ -119,5 +120,22 @@ describe('session_id fallback', () => {
     await expect(run(getReportTool(store, bindings), {}, 'conv-1')).rejects.toThrow(
       'data directory changed',
     )
+  })
+
+  it('refuses when the directory moves after the id was resolved', async () => {
+    const created = await createSession(store, '电视', '')
+    await bindings.bind(created.current_session_id, 'conv-1')
+    const elsewhere = await mkdtemp(join(tmpdir(), 'dealbuddy-elsewhere-'))
+
+    // The resolve succeeds, and the caller resumes in a later microtask — so
+    // the directory travels with the id and the store checks it inside its own
+    // lock rather than at the call site.
+    const resolved = await resolveSessionId(undefined, { agent: { id: 'conv-1' } }, bindings, store)
+    expect(resolved.expectDataDir).toBe(store.dataDir)
+    store.useDataDir(elsewhere)
+
+    await expect(
+      store.update(resolved.sessionId, (s) => s, resolved.expectDataDir),
+    ).rejects.toThrow('data directory changed')
   })
 })

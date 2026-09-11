@@ -117,32 +117,33 @@ export interface ExecLike {
  * @param exec - the run context, which names the conversation.
  * @param bindings - the binding table.
  * @param store - the session store the caller will act on.
- * @returns the session id to act on.
- * @throws when neither the argument nor a binding names one, or when the data
- *   directory moved while the binding was being read.
+ * @returns the session to act on, and — when it came from a binding — the
+ *   directory that binding was read from, for the operation to verify against.
+ * @throws when neither the argument nor a binding names one.
  */
 export async function resolveSessionId(
   sessionId: string | undefined,
   exec: ExecLike,
   bindings: BindingStore,
   store: SessionStore,
-): Promise<string> {
-  if (typeof sessionId === 'string' && sessionId !== '') return sessionId
+): Promise<{ sessionId: string; expectDataDir?: string }> {
+  if (typeof sessionId === 'string' && sessionId !== '') return { sessionId }
   const agentId = exec.agent?.id
   if (agentId !== undefined) {
     const dataDir = store.dataDir
     const binding = await bindings.byConversation(agentId)
     if (binding !== undefined) {
-      // The binding names a session in the directory it was read from. Acting
-      // on it after the setting moved would address a different directory, and
-      // a restored or copied data set can hold the same id — which is how a
-      // destructive refinement would land on the wrong session.
-      if (store.dataDir !== dataDir || bindings.dataDir !== dataDir) {
+      // The binding names a session in the directory it was read from, and the
+      // caller resumes in a later microtask — so the directory travels with the
+      // id and the operation checks it inside its own lock. A restored or
+      // copied data set can hold the same id, which is how a destructive call
+      // would otherwise land on the wrong session.
+      if (bindings.dataDir !== dataDir) {
         throw new Error(
           'The data directory changed while resolving this conversation\'s shopping session. Try again.',
         )
       }
-      return binding.session_id
+      return { sessionId: binding.session_id, expectDataDir: dataDir }
     }
   }
   throw new Error(
