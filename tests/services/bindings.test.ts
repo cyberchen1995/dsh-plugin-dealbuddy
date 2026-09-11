@@ -224,4 +224,17 @@ describe('evaluation request', () => {
       dsh_session_id: 'conv-1',
     })
   })
+
+  it('reports its own data directory so a caller can tell it moved', async () => {
+    const moved = await mkdtemp(join(tmpdir(), 'dealbuddy-moved-'))
+    expect(bindings.dataDir).toBe(sessions.dataDir)
+
+    bindings.useDataDir(moved)
+
+    // The Host compares the two stores before writing a binding: validating a
+    // session in one directory and recording it in another would name a file
+    // that is not there.
+    expect(bindings.dataDir).toBe(moved)
+    expect(bindings.dataDir).not.toBe(sessions.dataDir)
+  })
 })

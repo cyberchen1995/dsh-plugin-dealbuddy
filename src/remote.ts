@@ -149,12 +149,14 @@ export class DealbuddyRemote extends TypertRemoteService {
   async bind(sessionId: string, dshSessionId: string): Promise<{ binding: Binding }> {
     this.assertSessionId(sessionId)
     this.assertConversationId(dshSessionId)
+    const dataDir = this.store.dataDir
     const session = await this.store.load(sessionId)
     if (session === undefined) {
       throw new RemoteError('dealbuddy/session-not-found', `Unknown session: ${sessionId}`, {
         sessionId,
       })
     }
+    this.assertSameDataDir(dataDir)
     return { binding: await this.bindings.bind(sessionId, dshSessionId) }
   }
 
@@ -261,8 +263,14 @@ export class DealbuddyRemote extends TypertRemoteService {
     if (dshSessionId !== undefined && typeof dshSessionId !== 'string') {
       throw new RemoteError('gateway/bad-request', 'dshSessionId must be a string', {})
     }
+    const dataDir = this.store.dataDir
     const created = await createSession(this.store, category, request ?? '')
     if (dshSessionId === undefined || dshSessionId.trim() === '') {
+      return { session_id: created.current_session_id, bound: false }
+    }
+    if (this.store.dataDir !== dataDir || this.bindings.dataDir !== dataDir) {
+      // The session went to the directory that was live when it was created;
+      // binding it in another one would name a file that is not there.
       return { session_id: created.current_session_id, bound: false }
     }
     try {
@@ -345,6 +353,25 @@ export class DealbuddyRemote extends TypertRemoteService {
     if (typeof sessionId !== 'string' || !isValidSessionId(sessionId)) {
       throw new RemoteError('gateway/bad-request', 'session_id is not a session id', {})
     }
+  }
+
+  /**
+   * Refuse when the data directory moved mid-call.
+   *
+   * The session is validated against one directory and the binding is written
+   * to another store; a settings change between the two would record a binding
+   * naming a session file that is not there. Refusing is the honest answer —
+   * the caller can simply ask again.
+   * @param dataDir - the directory the call started in.
+   * @throws RemoteError when either store has moved since.
+   */
+  private assertSameDataDir(dataDir: string): void {
+    if (this.store.dataDir === dataDir && this.bindings.dataDir === dataDir) return
+    throw new RemoteError(
+      'gateway/bad-request',
+      'the data directory changed while this call was running; try again',
+      {},
+    )
   }
 
   /**

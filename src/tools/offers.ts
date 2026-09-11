@@ -8,7 +8,7 @@ import { refineSession } from '../core/refine.js'
 import { getReport, removeOfferByUrl } from '../services/sessions.js'
 import type { BindingStore } from '../store/binding-store.js'
 import type { SessionStore } from '../store/session-store.js'
-import { sessionIdOf } from './sessions.js'
+import { metaSessionId, resolvedSessionId } from './sessions.js'
 import { resolveSessionId, toPlain, writeSummary } from './shared.js'
 
 /**
@@ -196,11 +196,14 @@ export function getReportTool(store: SessionStore, bindings: BindingStore): Tool
               : value.report,
         },
       ],
+      // The argument may not name a session — the conversation's own binding
+      // stands in for it — so the title comes from what the call resolved.
+      presentationMeta: (_args, value) => ({ session_id: resolvedSessionId(value) }),
     },
-    presentResult: (args, result) =>
+    presentResult: (_args, result) =>
       result.isError
         ? undefined
-        : { card: 'generic', title: `DealBuddy 选品报告 · ${sessionIdOf(args)}` },
+        : { card: 'generic', title: `DealBuddy 选品报告 · ${metaSessionId(result.meta)}` },
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       return getReport(store, await resolveSessionId(args.session_id, exec, bindings))

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 
 import { getReportTool } from '../../src/tools/offers.js'
-import { showSessionTool } from '../../src/tools/sessions.js'
+import { metaSessionId, resolvedSessionId, showSessionTool } from '../../src/tools/sessions.js'
 import { createSession } from '../../src/services/sessions.js'
 import { BindingStore } from '../../src/store/binding-store.js'
 import { SessionStore } from '../../src/store/session-store.js'
@@ -85,5 +85,25 @@ describe('session_id fallback', () => {
     await expect(run(getReportTool(store, bindings), {})).rejects.toThrow(
       'Pass session_id explicitly',
     )
+  })
+
+  it('titles the result card with the session the call resolved', async () => {
+    const created = await createSession(store, '电视', '')
+    await bindings.bind(created.current_session_id, 'conv-1')
+    const tool = showSessionTool(store, bindings, () => 400)
+
+    const value = await run(tool, {}, 'conv-1')
+    // The arguments named no session, so a title built from them would read
+    // "(未知)"; the projector carries what the call actually acted on.
+    const meta = tool.output?.presentationMeta?.({}, value as never)
+
+    expect(resolvedSessionId(value)).toBe(created.current_session_id)
+    expect(metaSessionId(meta)).toBe(created.current_session_id)
+  })
+
+  it('falls back to a placeholder rather than a wrong id', () => {
+    expect(metaSessionId(undefined)).toBe('(未知)')
+    expect(metaSessionId({ session_id: '' })).toBe('(未知)')
+    expect(resolvedSessionId(null)).toBe('')
   })
 })

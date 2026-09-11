@@ -50,6 +50,11 @@ export class BindingStore {
     this.primeSync()
   }
 
+  /** The directory this store currently reads and writes. */
+  get dataDir(): string {
+    return this.#dataDir
+  }
+
   /**
    * Point the store at another directory, dropping the cached table.
    * @param dataDir - the new resolved absolute data directory.

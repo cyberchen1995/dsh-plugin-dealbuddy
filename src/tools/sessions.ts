@@ -73,11 +73,15 @@ export function showSessionTool(
     output: {
       schema: { type: 'json' },
       render: (_args, value) => [{ type: 'text', text: renderSession(value) }],
+      // The argument may not name a session at all — the conversation's own
+      // binding stands in for it — so the card's title comes from what the
+      // call resolved rather than from what it was asked.
+      presentationMeta: (_args, value) => ({ session_id: resolvedSessionId(value) }),
     },
-    presentResult: (args, result) =>
+    presentResult: (_args, result) =>
       result.isError
         ? undefined
-        : { card: 'generic', title: `DealBuddy 会话 ${sessionIdOf(args)}` },
+        : { card: 'generic', title: `DealBuddy 会话 ${metaSessionId(result.meta)}` },
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       const sessionId = await resolveSessionId(args.session_id, exec, bindings)
@@ -197,4 +201,28 @@ export function sessionIdOf(args: unknown): string {
   const record = args as { session_id?: unknown } | null
   const id = record?.session_id
   return typeof id === 'string' ? id : '(未知)'
+}
+
+/**
+ * Read the session a call actually acted on, out of its own result.
+ * @param value - the tool's canonical value.
+ * @returns the session id, or an empty string when the shape is unexpected.
+ */
+export function resolvedSessionId(value: unknown): string {
+  const record = value as { session_id?: unknown; session?: { session_id?: unknown } } | null
+  const direct = record?.session_id
+  if (typeof direct === 'string') return direct
+  const nested = record?.session?.session_id
+  return typeof nested === 'string' ? nested : ''
+}
+
+/**
+ * Narrow the presentation metadata back into a title fragment.
+ * @param meta - what `presentationMeta` projected.
+ * @returns the session id, or a placeholder when it is absent.
+ */
+export function metaSessionId(meta: unknown): string {
+  const record = meta as { session_id?: unknown } | null
+  const id = record?.session_id
+  return typeof id === 'string' && id !== '' ? id : '(未知)'
 }
