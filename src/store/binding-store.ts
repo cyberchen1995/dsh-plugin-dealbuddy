@@ -102,7 +102,16 @@ export class BindingStore {
     return this.#mutex.run(BINDINGS_FILENAME, async () => {
       if (this.#cache !== undefined) return this.#cache
       const dataDir = this.#dataDir
-      const parsed = await this.#read(dataDir)
+      let parsed: Binding[]
+      try {
+        parsed = await this.#read(dataDir)
+      } catch {
+        // Unreadable for a reason that may clear (the directory is not there
+        // yet, a permission problem). Answering "nothing is bound" is the only
+        // thing to do right now, but caching it would make that answer
+        // permanent — so the next call reads again.
+        return []
+      }
       if (dataDir === this.#dataDir) this.#cache = parsed
       return parsed
     })
@@ -211,19 +220,25 @@ export class BindingStore {
   }
 
   /**
-   * Parse the file, treating anything unreadable as an empty table.
+   * Read the file, separating "there is nothing" from "I could not look".
    *
-   * A binding is a convenience, not data anyone typed: refusing to load the
-   * plugin because this file was hand-edited would be the wrong trade.
+   * A file nobody has written yet, or one that was hand-edited into nonsense,
+   * is an empty table: refusing to load the plugin over a convenience file
+   * would be the wrong trade. Any other reason is NOT an empty table, and
+   * saying it is would be worse than failing — a write builds the next table
+   * on what it reads, so an empty answer here would erase every binding on
+   * disk.
    * @param dataDir - the directory this operation belongs to.
    * @returns the bindings on disk.
+   * @throws when the file exists but could not be read.
    */
   async #read(dataDir: string): Promise<Binding[]> {
     let raw: string
     try {
       raw = await readFile(join(dataDir, BINDINGS_FILENAME), 'utf8')
-    } catch {
-      return []
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
     }
     return parseBindings(raw)
   }

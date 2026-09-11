@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -143,5 +143,43 @@ describe('binding store', () => {
       'bbbbbbbbbbbb',
       'cccccccccccc',
     ])
+  })
+
+  it('reads again once the file becomes readable', async () => {
+    // Unreadable for a reason that can clear, rather than absent.
+    await mkdir(join(dataDir, BINDINGS_FILENAME))
+    const pending = new BindingStore(dataDir)
+
+    expect(await pending.list()).toEqual([])
+    // Caching that answer would make it permanent; the table has to stay open
+    // so recovery is actually picked up.
+    expect(pending.cached()).toBeUndefined()
+
+    await rm(join(dataDir, BINDINGS_FILENAME), { recursive: true })
+    await writeFile(
+      join(dataDir, BINDINGS_FILENAME),
+      JSON.stringify({
+        version: 1,
+        bindings: [{ session_id: 'aaaaaaaaaaaa', dsh_session_id: 'conv-1', bound_at: 't' }],
+      }),
+      'utf8',
+    )
+
+    expect(await pending.list()).toHaveLength(1)
+  })
+
+  it('refuses to write a table it could not read', async () => {
+    await store.bind('aaaaaaaaaaaa', 'conv-1')
+    await store.bind('bbbbbbbbbbbb', 'conv-2')
+
+    // Make the file unreadable in a way that is not "absent", and drop the
+    // cached table so the write has to go to disk for its basis.
+    const moved = await mkdtemp(join(tmpdir(), 'dealbuddy-unreadable-'))
+    const blocked = new BindingStore(moved)
+    await mkdir(join(moved, BINDINGS_FILENAME))
+
+    // A write builds the next table on what it reads: treating the failure as
+    // an empty table would persist one entry and erase the rest.
+    await expect(blocked.bind('cccccccccccc', 'conv-3')).rejects.toThrow()
   })
 })
