@@ -225,12 +225,18 @@ export class WorkbenchStore {
     this.#listeners.clear()
   }
 
-  /** Re-read after a reconnect. */
+  /**
+   * Re-read after a reconnect.
+   *
+   * The lists are re-read whether or not the drawer is open: the conversation
+   * header badge renders from them too, and a restarted Host or a moved data
+   * directory would otherwise leave it wrong until someone opened the drawer.
+   */
   resume(): void {
-    if (this.#disposed || !this.#state.open) return
+    if (this.#disposed) return
     this.#retimer()
     void this.refresh({ silent: true })
-    void this.refreshStatus()
+    if (this.#state.open) void this.refreshStatus()
   }
 
   /**
@@ -432,18 +438,15 @@ export class WorkbenchStore {
     if (category.trim() === '') return
     const conversation = this.#state.conversation
     await this.#write(async () => {
-      const created = await callWorkbench<{ session_id: string }>(this.ctx, 'createSession', {
+      // One call: a session made from inside a conversation belongs to it, and
+      // splitting that into create-then-bind would let the first half succeed
+      // on its own — leaving an unbound session and a form the user submits
+      // again, which is how duplicates appear.
+      await callWorkbench(this.ctx, 'createSession', {
         category,
         request,
+        ...(conversation === null ? {} : { dshSessionId: conversation.id }),
       })
-      // A shopping session and the conversation about it are one thing, so a
-      // session made from inside a conversation belongs to it straight away.
-      if (conversation !== null) {
-        await callWorkbench(this.ctx, 'bind', {
-          sessionId: created.session_id,
-          dshSessionId: conversation.id,
-        })
-      }
       // Clear only what was actually submitted. The inputs stay live during
       // the call, so anything typed since belongs to the next session.
       this.#set({

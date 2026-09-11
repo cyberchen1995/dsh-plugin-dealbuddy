@@ -234,13 +234,22 @@ export class DealbuddyRemote extends TypertRemoteService {
   }
 
   /**
-   * Create a session and point captures at it.
+   * Create a session, point captures at it, and bind it to a conversation.
+   *
+   * One call rather than two: a create that succeeded followed by a bind that
+   * failed would leave an unbound session behind and a form the user is bound
+   * to submit again, which is how duplicate shopping sessions appear.
    * @param category - the product category.
    * @param request - the user's request in their own words; may be omitted.
+   * @param dshSessionId - the conversation to bind it to; may be omitted.
    * @returns the new session's id.
    */
   @Remote
-  async createSession(category: string, request?: string): Promise<{ session_id: string }> {
+  async createSession(
+    category: string,
+    request?: string,
+    dshSessionId?: string,
+  ): Promise<{ session_id: string }> {
     // Validated on the trimmed value but stored as sent: the tool face does
     // not trim either, and the two faces have to write the same file.
     if (typeof category !== 'string' || category.trim() === '') {
@@ -249,7 +258,13 @@ export class DealbuddyRemote extends TypertRemoteService {
     if (request !== undefined && typeof request !== 'string') {
       throw new RemoteError('gateway/bad-request', 'request must be a string', {})
     }
+    if (dshSessionId !== undefined && typeof dshSessionId !== 'string') {
+      throw new RemoteError('gateway/bad-request', 'dshSessionId must be a string', {})
+    }
     const created = await createSession(this.store, category, request ?? '')
+    if (dshSessionId !== undefined && dshSessionId.trim() !== '') {
+      await this.bindings.bind(created.current_session_id, dshSessionId)
+    }
     return { session_id: created.current_session_id }
   }
 

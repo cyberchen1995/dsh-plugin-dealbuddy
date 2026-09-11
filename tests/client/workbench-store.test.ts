@@ -209,16 +209,13 @@ describe('workbench store', () => {
     // The source-mode Gateway matches these keys against the Host method's
     // parameter names and refuses anything else, so the names are a contract.
     // The value goes as typed: the tool face does not trim either, and both
-    // faces have to write the same file.
+    // faces have to write the same file. The binding rides along in the same
+    // call, so a created session can never be left unbound.
     expect(context.calls[0]).toEqual({
       method: 'createSession',
-      args: { category: ' 电视 ', request: '预算5000以内' },
+      args: { category: ' 电视 ', request: '预算5000以内', dshSessionId: CONVERSATION },
     })
-    // A session made from inside a conversation belongs to it straight away.
-    expect(context.calls[1]).toEqual({
-      method: 'bind',
-      args: { sessionId: 'cccccccccccc', dshSessionId: CONVERSATION },
-    })
+    expect(context.calls.some((call) => call.method === 'bind')).toBe(false)
     expect(store.getSnapshot().draftCategory).toBe('')
   })
 
@@ -665,5 +662,25 @@ describe('workbench store', () => {
     // for a row that is already bound.
     expect(store.getSnapshot().boundSessionId).toBe('aaaaaaaaaaaa')
     expect(store.getSnapshot().session).toBeNull()
+  })
+
+  it('re-reads on a reconnect even with the drawer closed', async () => {
+    const context = new FakeContext()
+    answerWith(context, 'aaaaaaaaaaaa', session('t1', ['a']))
+    store = newStore(context)
+    await store.refresh()
+    const before = context.calls.filter((call) => call.method === 'listSessions').length
+
+    // The drawer is shut, but the conversation header badge renders from these
+    // lists too — a restarted Host would otherwise leave it wrong until
+    // someone opened the drawer.
+    expect(store.getSnapshot().open).toBe(false)
+    store.resume()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(
+      context.calls.filter((call) => call.method === 'listSessions').length,
+    ).toBeGreaterThan(before)
   })
 })

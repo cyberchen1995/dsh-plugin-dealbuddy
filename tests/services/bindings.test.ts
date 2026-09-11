@@ -211,4 +211,17 @@ describe('evaluation request', () => {
 
     expect(provider?.({})).toBe('')
   })
+
+  it('binds a session to its conversation as it is created', async () => {
+    const created = await createSession(sessions, '电视', '预算5000以内')
+    // What the Host's createSession does when a conversation is named: the two
+    // halves cannot be separated, so a created session is never left unbound.
+    await bindings.bind(created.current_session_id, 'conv-1')
+
+    const fresh = new BindingStore(sessions.dataDir)
+    expect(fresh.cached()?.[0]).toMatchObject({
+      session_id: created.current_session_id,
+      dsh_session_id: 'conv-1',
+    })
+  })
 })
